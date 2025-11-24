@@ -1,0 +1,9 @@
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'test-access-secret-32-chars-minimum-value!!';
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-refresh-secret-32-chars-minimum!!';
+process.env.ACCESS_TOKEN_EXPIRES_IN = process.env.ACCESS_TOKEN_EXPIRES_IN || '15m';
+process.env.REFRESH_TOKEN_EXPIRES_IN = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
+process.env.COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || 'lax';
+process.env.COOKIE_SECURE = process.env.COOKIE_SECURE || 'false';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:PostGreSQL@localhost:5433/new-medical?schema=public';
+process.env.LOG_DIR = process.env.LOG_DIR || './logs';
