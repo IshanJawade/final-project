@@ -9,6 +9,9 @@ import { fingerprint } from './middleware/fingerprint';
 import { enforceHttps } from './middleware/httpsOnly';
 import authRoutes from './routes/auth.routes';
 import patientRoutes from './routes/patient.routes';
+import caseRoutes from './routes/case.routes';
+import visitRoutes from './routes/visit.routes';
+import appointmentRoutes from './routes/appointment.routes';
 import { problemResponder } from './utils/problem';
 
 const app = express();
@@ -41,6 +44,9 @@ app.get('/health', (_req, res) => {
 
 app.use('/auth', authRoutes);
 app.use('/patients', patientRoutes);
+app.use('/cases', caseRoutes);
+app.use('/', visitRoutes);
+app.use('/', appointmentRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({
