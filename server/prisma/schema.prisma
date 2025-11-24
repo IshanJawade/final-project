@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+  PATIENT
+}
+
+enum CaseStatus {
+  OPEN
+  CLOSED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AuditOutcome {
+  SUCCESS
+  DENY
+  ERROR
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password_hash String
+  role         Role
+  first_name   String
+  last_name    String
+  dob          DateTime?
+  phone        String?
+  is_active    Boolean  @default(true)
+  failed_login_attempts Int      @default(0)
+  locked_until DateTime?
+  totp_secret  String?
+  two_factor_enabled Boolean @default(false)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  doctorProfile DoctorProfile?
+  patientProfile PatientProfile?
+  refreshTokens RefreshToken[]
+}
+
+model DoctorProfile {
+  id               String   @id @default(uuid())
+  user             User     @relation(fields: [userId], references: [id])
+  userId           String   @unique
+  specialization   Specialization? @relation(fields: [specializationId], references: [id])
+  specializationId String?
+  license_number   String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+  availability     AvailabilitySlot[]
+  appointments     Appointment[]
+  cases            Case[]
+}
+
+model PatientProfile {
+  id                String   @id @default(uuid())
+  user              User?    @relation(fields: [userId], references: [id])
+  userId            String?  @unique
+  mrn               String   @unique
+  first_name        String
+  last_name         String
+  phone             String?
+  dob               DateTime
+  contact_info      Json?
+  address           Json?
+  emergency_contact Json?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  cases             Case[]
+  appointments      Appointment[]
+}
+
+model Case {
+  id                    String   @id @default(uuid())
+  patient               PatientProfile @relation(fields: [patientId], references: [id])
+  patientId             String
+  assignedDoctor        DoctorProfile  @relation(fields: [assignedDoctorId], references: [id])
+  assignedDoctorId      String
+  status                CaseStatus @default(OPEN)
+  summary               String?
+  symptoms_text         String?
+  visits                Visit[]
+  created_by_user_id    String
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  closed_at             DateTime?
+  closed_by_doctor_id   String?
+  files                 File[]
+  appointments          Appointment[]
+}
+
+model Visit {
+  id                   String   @id @default(uuid())
+  case                 Case     @relation(fields: [caseId], references: [id])
+  caseId               String
+  visit_number         Int
+  visit_datetime       DateTime
+  vitals               Json
+  notes                String
+  created_by_doctor_id String
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  prescription         Prescription?
+  files                File[]
+}
+
+model Prescription {
+  id                     String  @id @default(uuid())
+  visit                  Visit   @relation(fields: [visitId], references: [id])
+  visitId                String  @unique
+  medication_name        String
+  dosage                 String
+  frequency              String
+  route                  String
+  duration               String
+  notes                  String?
+  created_by_doctor_id   String
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+}
+
+model Appointment {
+  id               String   @id @default(uuid())
+  case             Case     @relation(fields: [caseId], references: [id])
+  caseId           String
+  doctor           DoctorProfile @relation(fields: [doctorId], references: [id])
+  doctorId         String
+  patient          PatientProfile @relation(fields: [patientId], references: [id])
+  patientId        String
+  start_time       DateTime
+  end_time         DateTime
+  status           AppointmentStatus @default(SCHEDULED)
+  created_by_user_id String
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+}
+
+model File {
+  id             String   @id @default(uuid())
+  case           Case     @relation(fields: [caseId], references: [id])
+  caseId         String
+  visit          Visit?   @relation(fields: [visitId], references: [id])
+  visitId        String?
+  uploader_user_id String
+  filename       String
+  mimetype       String
+  size_bytes     Int
+  storage_key    String
+  checksum_sha256 String
+  created_at     DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  timestamp   DateTime @default(now())
+  actor_user_id String?
+  action      String
+  resource_type String
+  resource_id String?
+  before_json Json?
+  after_json  Json?
+  ip          String?
+  user_agent  String?
+  request_id  String?
+  outcome     AuditOutcome
+}
+
+model RefreshToken {
+  id              String   @id @default(uuid())
+  user            User     @relation(fields: [userId], references: [id])
+  userId          String
+  token_hash      String
+  family_id       String
+  fingerprint_hash String
+  expires_at      DateTime
+  created_at      DateTime @default(now())
+  revoked_at      DateTime?
+  revoked_reason  String?
+
+  @@index([userId])
+  @@index([family_id])
+  @@unique([token_hash])
+}
+
+model Specialization {
+  id    String @id @default(uuid())
+  name  String @unique
+  doctors DoctorProfile[]
+}
+
+model AvailabilitySlot {
+  id        String   @id @default(uuid())
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id])
+  doctorId  String
+  start_time DateTime
+  end_time  DateTime
+  is_booked Boolean @default(false)
+}

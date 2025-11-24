@@ -1,0 +1,27 @@
+# Node dependencies
+node_modules/
+
+# Build artifacts
+server/dist/
+web/dist/
+coverage/
+
+# Environment files
+server/.env
+web/.env
+.env
+
+# Logs and backups
+logs/
+backups/
+*.log
+
+# Prisma artifacts
+server/prisma/*.db
+server/prisma/migrations/**/README.md
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
