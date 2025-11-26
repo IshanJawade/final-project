@@ -1,19 +1,102 @@
-const metricCards = [
-  { title: 'Active Cases', value: '128', trend: '+12% vs last week' },
-  { title: 'Appointments Today', value: '42', trend: '+5 urgent' },
-  { title: 'Avg. Wait Time', value: '08m', trend: '-2m optimization' },
-  { title: 'Compliance Score', value: '99.2%', trend: 'Audit ready' }
-];
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
+import { AppointmentSummary, CaseSummary } from '../types';
 
-const timeline = [
-  { time: '08:30', title: 'Cardiology board huddle', detail: 'Dr. House + Ops' },
-  { time: '10:00', title: 'MRI follow-up', detail: 'Patient MRN-1001' },
-  { time: '13:15', title: 'Intake review', detail: '12 new patients' }
-];
+type TimelineItem = {
+  id: string;
+  time: string;
+  title: string;
+  detail: string;
+};
 
-const quickActions = ['New Intake', 'Assign Case', 'Create Visit', 'Add File'];
+const formatTime = (iso: string) => {
+  const date = new Date(iso);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const formatPerson = (first?: string, last?: string) => {
+  if (!first && !last) {
+    return 'Unknown';
+  }
+  return `${first ?? ''} ${last ?? ''}`.trim();
+};
+
+const startAndEndOfToday = () => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+};
 
 export const Dashboard = () => {
+  const { authedRequest, user } = useAuth();
+  const canLoadCases = user.role !== 'RECEPTIONIST';
+
+  const casesQuery = useQuery({
+    queryKey: ['dashboard-cases', user.role],
+    queryFn: () => authedRequest<{ data: CaseSummary[] }>('/cases?limit=25'),
+    enabled: canLoadCases
+  });
+
+  const { start, end } = useMemo(() => startAndEndOfToday(), []);
+  const appointmentParams = useMemo(() => {
+    const params = new URLSearchParams({
+      limit: '50',
+      from: start.toISOString(),
+      to: end.toISOString()
+    });
+    return params.toString();
+  }, [start, end]);
+
+  const appointmentsQuery = useQuery({
+    queryKey: ['dashboard-appointments', user.role, appointmentParams],
+    queryFn: () => authedRequest<{ data: AppointmentSummary[] }>(`/appointments?${appointmentParams}`)
+  });
+
+  const cases = casesQuery.data?.data ?? [];
+  const appointments = appointmentsQuery.data?.data ?? [];
+
+  const openCaseCount = cases.filter((item) => item.status === 'OPEN').length;
+  const todaysCompleted = appointments.filter((appt) => appt.status === 'COMPLETED').length;
+
+  const upcomingTimeline: TimelineItem[] = appointments
+    .slice()
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    .slice(0, 6)
+    .map((appt) => ({
+      id: appt.id,
+      time: formatTime(appt.start_time),
+      title: appt.patient ? `Visit · ${formatPerson(appt.patient.first_name, appt.patient.last_name)}` : `Case ${appt.case_id}`,
+      detail: `Dr. ${formatPerson(appt.doctor.first_name, appt.doctor.last_name)} · ${appt.status}`
+    }));
+
+  const quickActions = user.role === 'PATIENT' ? ['View Cases', 'Upcoming Visits'] : ['New Intake', 'Assign Case', 'Create Visit', 'Add File'];
+
+  const metricCards = [
+    {
+      title: 'Open Cases',
+      value: canLoadCases ? openCaseCount.toString() : '—',
+      trend: canLoadCases ? `${cases.length} total tracked` : 'Requires patient context'
+    },
+    {
+      title: 'Appointments Today',
+      value: appointments.length.toString(),
+      trend: `${todaysCompleted} completed`
+    },
+    {
+      title: 'Upcoming Window',
+      value: upcomingTimeline.length.toString(),
+      trend: 'Next scheduled visits'
+    },
+    {
+      title: 'Compliance Score',
+      value: '99.2%',
+      trend: 'Audit ready'
+    }
+  ];
+
   return (
     <div className="dashboard">
       <div className="page-heading">
@@ -41,16 +124,20 @@ export const Dashboard = () => {
             <span className="badge">Live</span>
           </div>
           <div className="timeline" style={{ marginTop: '1.5rem' }}>
-            {timeline.map((item) => (
-              <div className="timeline-item" key={item.title}>
-                <div className="timeline-marker" />
-                <div>
-                  <strong>{item.time}</strong>
-                  <div>{item.title}</div>
-                  <small style={{ color: 'var(--text-muted)' }}>{item.detail}</small>
+            {upcomingTimeline.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)' }}>No scheduled activity for the current window.</div>
+            ) : (
+              upcomingTimeline.map((item) => (
+                <div className="timeline-item" key={item.id}>
+                  <div className="timeline-marker" />
+                  <div>
+                    <strong>{item.time}</strong>
+                    <div>{item.title}</div>
+                    <small style={{ color: 'var(--text-muted)' }}>{item.detail}</small>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </article>
 

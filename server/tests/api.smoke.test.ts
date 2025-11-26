@@ -1,6 +1,9 @@
 import supertest from 'supertest';
+import path from 'path';
+import fs from 'fs/promises';
 import app from '../src/app';
 import { prisma } from '../src/lib/prisma';
+import { env } from '../src/config/env';
 
 const agent: any = supertest(app);
 const deviceFingerprint = 'integration-suite-device';
@@ -33,11 +36,13 @@ describe('API smoke workflow', () => {
   let receptionistToken: string;
   let patientToken: string;
   let doctorProfileId: string;
+  let specializationInternalMedId: string | null = null;
 
   let createdPatientId: string | null = null;
   let createdCaseId: string | null = null;
   let createdVisitId: string | null = null;
   let createdAppointmentId: string | null = null;
+  let uploadedFileId: string | null = null;
 
   beforeAll(async () => {
     await prisma.$connect();
@@ -51,6 +56,25 @@ describe('API smoke workflow', () => {
     doctorToken = await staffLogin('drhouse@example.com', 'Doctor!234');
     receptionistToken = await staffLogin('frontdesk@example.com', 'Reception!234');
     patientToken = await patientLogin('patient@example.com', 'Patient!234');
+
+    const specializationRes = await agent
+      .get('/specializations')
+      .set(authHeader(receptionistToken))
+      .expect(200);
+
+    const internalMed = specializationRes.body.data.find((spec: any) => spec.name === 'Internal Medicine');
+    expect(internalMed).toBeDefined();
+    specializationInternalMedId = internalMed.id;
+
+    const doctorDirectoryRes = await agent
+      .get('/doctors')
+      .set(authHeader(receptionistToken))
+      .query({ specialization: 'Internal Medicine' })
+      .expect(200);
+
+    expect(
+      doctorDirectoryRes.body.data.some((doc: any) => doc.id === doctorProfileId && doc.specialization_id === specializationInternalMedId)
+    ).toBe(true);
   });
 
   afterAll(async () => {
@@ -71,7 +95,13 @@ describe('API smoke workflow', () => {
       await prisma.patientProfile.deleteMany({ where: { id: createdPatientId } });
     }
 
+    if (uploadedFileId) {
+      await prisma.file.deleteMany({ where: { id: uploadedFileId } });
+    }
+
     await prisma.$disconnect();
+
+    await fs.rm(path.resolve(env.FILE_STORAGE_DIR), { recursive: true, force: true }).catch(() => undefined);
   });
 
   it('executes the primary clinical workflow end-to-end', async () => {
@@ -84,7 +114,7 @@ describe('API smoke workflow', () => {
 
     const patientRes = await agent
       .post('/patients')
-      .set(authHeader(adminToken))
+      .set(authHeader(receptionistToken))
       .send(patientPayload)
       .expect(201);
 
@@ -93,12 +123,12 @@ describe('API smoke workflow', () => {
 
     await agent
       .get(`/patients/${createdPatientId}`)
-      .set(authHeader(adminToken))
+      .set(authHeader(receptionistToken))
       .expect(200);
 
     const caseRes = await agent
       .post('/cases')
-      .set(authHeader(adminToken))
+      .set(authHeader(receptionistToken))
       .send({
         patient_id: createdPatientId,
         assigned_doctor_id: doctorProfileId,
@@ -127,6 +157,33 @@ describe('API smoke workflow', () => {
       .expect(201);
 
     createdVisitId = visitRes.body.visit.id;
+
+    const samplePdf = path.resolve(__dirname, 'fixtures', 'sample.pdf');
+
+    const fileUploadRes = await agent
+      .post('/files')
+      .set(authHeader(doctorToken))
+      .field('case_id', createdCaseId)
+      .field('visit_id', createdVisitId)
+      .attach('file', samplePdf)
+      .expect(201);
+
+    uploadedFileId = fileUploadRes.body.file.id;
+
+    const patientFileMeta = await agent
+      .get(`/files/${uploadedFileId}/meta`)
+      .set(authHeader(patientToken))
+      .expect(200);
+
+    expect(patientFileMeta.body.file.filename).toContain('.pdf');
+
+    const downloadUrlRes = await agent
+      .get(`/files/${uploadedFileId}/download`)
+      .set(authHeader(patientToken))
+      .expect(200);
+
+    const streamRes = await agent.get(downloadUrlRes.body.url).expect(200);
+    expect(streamRes.headers['content-type']).toBe('application/pdf');
 
     await agent
       .put(`/visits/${createdVisitId}/prescription`)
@@ -188,8 +245,16 @@ describe('API smoke workflow', () => {
 
     await agent
       .post(`/cases/${createdCaseId}/close`)
-      .set(authHeader(adminToken))
+      .set(authHeader(doctorToken))
       .send({ summary: 'Resolved via automation' })
       .expect(200);
+
+    const receptionistOpenCases = await agent
+      .get('/cases')
+      .set(authHeader(receptionistToken))
+      .query({ status: 'OPEN', patient_id: createdPatientId })
+      .expect(200);
+
+    expect(receptionistOpenCases.body.data.every((c: any) => c.id !== createdCaseId)).toBe(true);
   });
 });

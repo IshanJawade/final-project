@@ -40,7 +40,19 @@ async function seedUsers(specializationMap: Map<string, string>) {
 
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
+    update: {
+      password_hash: adminPassword,
+      role: 'ADMIN',
+      first_name: 'Alice',
+      last_name: 'Admin',
+      dob: new Date('1980-04-12'),
+      phone: '+1-555-0001',
+      is_active: true,
+      failed_login_attempts: 0,
+      locked_until: null,
+      two_factor_enabled: false,
+      totp_secret: null
+    },
     create: {
       email: 'admin@example.com',
       password_hash: adminPassword,
@@ -54,7 +66,19 @@ async function seedUsers(specializationMap: Map<string, string>) {
 
   const doctorUser = await prisma.user.upsert({
     where: { email: 'drhouse@example.com' },
-    update: {},
+    update: {
+      password_hash: doctorPassword,
+      role: 'DOCTOR',
+      first_name: 'Gregory',
+      last_name: 'House',
+      dob: new Date('1975-06-11'),
+      phone: '+1-555-0002',
+      is_active: true,
+      failed_login_attempts: 0,
+      locked_until: null,
+      two_factor_enabled: false,
+      totp_secret: null
+    },
     create: {
       email: 'drhouse@example.com',
       password_hash: doctorPassword,
@@ -68,7 +92,19 @@ async function seedUsers(specializationMap: Map<string, string>) {
 
   const receptionistUser = await prisma.user.upsert({
     where: { email: 'frontdesk@example.com' },
-    update: {},
+    update: {
+      password_hash: receptionistPassword,
+      role: 'RECEPTIONIST',
+      first_name: 'Rita',
+      last_name: 'Reception',
+      dob: new Date('1992-02-20'),
+      phone: '+1-555-0003',
+      is_active: true,
+      failed_login_attempts: 0,
+      locked_until: null,
+      two_factor_enabled: false,
+      totp_secret: null
+    },
     create: {
       email: 'frontdesk@example.com',
       password_hash: receptionistPassword,
@@ -82,7 +118,12 @@ async function seedUsers(specializationMap: Map<string, string>) {
 
   const patientProfile = await prisma.patientProfile.upsert({
     where: { mrn: 'MRN-1001' },
-    update: {},
+    update: {
+      first_name: 'Jane',
+      last_name: 'Doe',
+      phone: '+1-555-1001',
+      dob: new Date('1990-01-15')
+    },
     create: {
       mrn: 'MRN-1001',
       first_name: 'Jane',
@@ -94,7 +135,19 @@ async function seedUsers(specializationMap: Map<string, string>) {
 
   const patientUser = await prisma.user.upsert({
     where: { email: 'patient@example.com' },
-    update: {},
+    update: {
+      password_hash: patientPassword,
+      role: 'PATIENT',
+      first_name: patientProfile.first_name,
+      last_name: patientProfile.last_name,
+      dob: patientProfile.dob,
+      phone: patientProfile.phone ?? undefined,
+      is_active: true,
+      failed_login_attempts: 0,
+      locked_until: null,
+      two_factor_enabled: false,
+      totp_secret: null
+    },
     create: {
       email: 'patient@example.com',
       password_hash: patientPassword,

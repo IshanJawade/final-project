@@ -1,0 +1,93 @@
+
+> mrs-server@0.1.0 test
+> jest --runInBand --runTestsByPath tests/api.smoke.test.ts
+
+  console.log
+    {"ts":"2025-11-26T09:53:32.147Z","requestId":"22100ba5-53f4-4b38-a92c-abbee6f85cc5","method":"POST","url":"/auth/staff/login","status":200,"duration_ms":282}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:32.519Z","requestId":"870882de-21b0-458c-830c-112117f1531d","method":"POST","url":"/auth/staff/login","status":200,"duration_ms":349}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:32.790Z","requestId":"6738c87b-d91c-4e8d-8a93-8a38b4c404f6","method":"POST","url":"/auth/staff/login","status":200,"duration_ms":262}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.157Z","requestId":"141382ed-5bd1-489a-94cd-4223399b2659","method":"POST","url":"/auth/patient/login","status":200,"duration_ms":360}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.170Z","requestId":"54d0f553-534e-4e68-9d54-e9d9dab5135a","method":"GET","url":"/specializations","status":200,"duration_ms":6}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.186Z","requestId":"b5d53a15-e39c-47b4-a411-2ea8e6ea6d7f","method":"GET","url":"/doctors?specialization=Internal%20Medicine","status":200,"duration_ms":7}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.218Z","requestId":"aab36ac0-582f-4a46-9e6f-77cea0693e42","method":"POST","url":"/patients","status":201,"duration_ms":23}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.229Z","requestId":"8a21f98b-6aae-4081-bc16-f11e27a2ef66","method":"GET","url":"/patients/203909d5-bf7c-47e6-8346-d96d2b20c720","status":200,"duration_ms":4}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.253Z","requestId":"8a2bf636-7596-41bb-977e-2ca61a5dea8e","method":"POST","url":"/cases","status":201,"duration_ms":17}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.268Z","requestId":"6691e1b4-f859-47e8-9692-3047c5d426a9","method":"GET","url":"/cases","status":200,"duration_ms":8}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.294Z","requestId":"66ce0191-2788-4dc8-92d6-368dab89846c","method":"POST","url":"/cases/34c95e41-4b71-47e3-b5b6-6c2a483a97cf/visits","status":201,"duration_ms":19}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+  console.log
+    {"ts":"2025-11-26T09:53:33.334Z","requestId":"f0efcf07-8703-470e-ada2-a4883a69b231","method":"POST","url":"/files","status":500,"duration_ms":25}
+
+      at ServerResponse.<anonymous> (src/middleware/logger.ts:16:13)
+
+FAIL tests/api.smoke.test.ts
+  API smoke workflow
+    ✕ executes the primary clinical workflow end-to-end (148 ms)
+
+  ● API smoke workflow › executes the primary clinical workflow end-to-end
+
+    expected 201 "Created", got 500 "Internal Server Error"
+
+      167 |       .field('visit_id', createdVisitId)
+      168 |       .attach('file', samplePdf)
+    > 169 |       .expect(201);
+          |        ^
+      170 |
+      171 |     uploadedFileId = fileUploadRes.body.file.id;
+      172 |
+
+      at Object.<anonymous> (tests/api.smoke.test.ts:169:8)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        3.568 s, estimated 4 s
+Ran all test suites within paths "tests/api.smoke.test.ts".

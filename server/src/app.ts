@@ -12,6 +12,9 @@ import patientRoutes from './routes/patient.routes';
 import caseRoutes from './routes/case.routes';
 import visitRoutes from './routes/visit.routes';
 import appointmentRoutes from './routes/appointment.routes';
+import doctorRoutes from './routes/doctor.routes';
+import specializationRoutes from './routes/specialization.routes';
+import fileRoutes from './routes/file.routes';
 import { problemResponder } from './utils/problem';
 
 const app = express();
@@ -47,6 +50,9 @@ app.use('/patients', patientRoutes);
 app.use('/cases', caseRoutes);
 app.use('/', visitRoutes);
 app.use('/', appointmentRoutes);
+app.use('/doctors', doctorRoutes);
+app.use('/specializations', specializationRoutes);
+app.use('/', fileRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({

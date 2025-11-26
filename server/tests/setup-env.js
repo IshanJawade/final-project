@@ -5,5 +5,5 @@ process.env.ACCESS_TOKEN_EXPIRES_IN = process.env.ACCESS_TOKEN_EXPIRES_IN || '15
 process.env.REFRESH_TOKEN_EXPIRES_IN = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
 process.env.COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || 'lax';
 process.env.COOKIE_SECURE = process.env.COOKIE_SECURE || 'false';
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:PostGreSQL@localhost:5433/new-medical?schema=public';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:PostGreSQL@localhost:5432/medical-records-db?schema=public';
 process.env.LOG_DIR = process.env.LOG_DIR || './logs';

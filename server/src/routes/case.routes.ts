@@ -107,7 +107,7 @@ router.get(
 
 router.post(
   '/',
-  requireRoles('ADMIN', 'DOCTOR'),
+  requireRoles('ADMIN', 'DOCTOR', 'RECEPTIONIST'),
   validateBody(CreateCaseSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -124,6 +124,9 @@ router.post(
       });
       if (!doctor) {
         throw new ProblemDetails({ status: 404, title: 'Assigned doctor not found' });
+      }
+      if (!doctor.user.is_active) {
+        throw new ProblemDetails({ status: 400, title: 'Assigned doctor is inactive' });
       }
 
       if (req.user!.role === 'DOCTOR') {
@@ -264,7 +267,7 @@ router.patch(
 
 router.post(
   '/:id/close',
-  requireRoles('ADMIN', 'DOCTOR'),
+  requireRoles('DOCTOR'),
   validateBody(CloseCaseSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -273,17 +276,20 @@ router.post(
         throw new ProblemDetails({ status: 409, title: 'Case already closed' });
       }
 
-      if (req.user!.role === 'DOCTOR') {
-        const doctor = await authorizationService.requireDoctorProfile(req.user!.id);
-        if (existing.assignedDoctor?.id !== doctor.id) {
-          throw new ProblemDetails({ status: 403, title: 'Doctor cannot close this case.' });
-        }
+      const doctor = await authorizationService.requireDoctorProfile(req.user!.id);
+      if (existing.assignedDoctor?.id !== doctor.id) {
+        throw new ProblemDetails({ status: 403, title: 'Doctor cannot close this case.' });
+      }
+
+      const visitCount = await prisma.visit.count({ where: { caseId: existing.id } });
+      if (visitCount === 0) {
+        throw new ProblemDetails({ status: 409, title: 'At least one visit is required before closing the case.' });
       }
 
       const data: Record<string, unknown> = {
         status: 'CLOSED',
         closed_at: new Date(),
-        closed_by_doctor_id: existing.assignedDoctor?.id ?? null
+        closed_by_doctor_id: doctor.id
       };
       if (req.body.summary !== undefined) {
         data.summary = req.body.summary;

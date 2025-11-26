@@ -19,7 +19,12 @@ const EnvSchema = z.object({
   LOCKOUT_DURATION_MINUTES: z.coerce.number().default(15),
   SYSTEM_VERIFIED: z.string().default('false'),
   HTTPS_ONLY: z.string().optional(),
-  LOG_DIR: z.string().default('./logs')
+  LOG_DIR: z.string().default('./logs'),
+  FILE_STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  FILE_STORAGE_DIR: z.string().default('./uploads'),
+  FILE_MAX_BYTES: z.coerce.number().default(20 * 1024 * 1024),
+  FILE_SIGNING_SECRET: z.string().min(16).default('replace_this_download_secret'),
+  FILE_DOWNLOAD_TTL_SECONDS: z.coerce.number().min(60).default(300)
 });
 
 const parsed = EnvSchema.parse(process.env);
@@ -47,5 +52,10 @@ export const env = {
   REFRESH_TOKEN_TTL_MS: toDurationMs(parsed.REFRESH_TOKEN_EXPIRES_IN, '7d'),
   SYSTEM_VERIFIED: toBool(parsed.SYSTEM_VERIFIED),
   COOKIE_SECURE_FLAG: parsed.COOKIE_SECURE ? toBool(parsed.COOKIE_SECURE) : parsed.NODE_ENV === 'production',
-  HTTPS_ONLY: toBool(parsed.HTTPS_ONLY)
+  HTTPS_ONLY: toBool(parsed.HTTPS_ONLY),
+  FILE_STORAGE_DRIVER: parsed.FILE_STORAGE_DRIVER,
+  FILE_STORAGE_DIR: parsed.FILE_STORAGE_DIR,
+  FILE_MAX_BYTES: parsed.FILE_MAX_BYTES,
+  FILE_SIGNING_SECRET: parsed.FILE_SIGNING_SECRET,
+  FILE_DOWNLOAD_TTL_MS: parsed.FILE_DOWNLOAD_TTL_SECONDS * 1000
 };
