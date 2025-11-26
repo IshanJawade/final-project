@@ -10,6 +10,28 @@ export type UserProfile = {
   two_factor_enabled: boolean;
 };
 
+export type SpecializationSummary = {
+  id: string;
+  name: string;
+};
+
+export type StaffRecord = {
+  id: string;
+  email: string;
+  role: 'DOCTOR' | 'RECEPTIONIST';
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  dob: string | null;
+  is_active: boolean;
+  doctor_profile: null | {
+    id: string;
+    specialization_id: string | null;
+    specialization_name: string | null;
+    license_number: string | null;
+  };
+};
+
 export type PatientSummary = {
   id: string;
   mrn: string;

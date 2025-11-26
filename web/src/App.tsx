@@ -7,6 +7,7 @@ import { PatientsPage } from './pages/Patients';
 import { CasesPage } from './pages/Cases';
 import { AppointmentsPage } from './pages/Appointments';
 import { CompliancePage } from './pages/Compliance';
+import { AdminStaffPage } from './pages/AdminStaff';
 import { LoginPage } from './pages/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -50,6 +51,7 @@ const AppContent = () => {
         <Route path="/cases" element={<CasesPage />} />
         <Route path="/appointments" element={<AppointmentsPage />} />
         <Route path="/compliance" element={<CompliancePage />} />
+        <Route path="/admin/staff" element={<AdminStaffPage />} />
       </Routes>
     </AppShell>
   );

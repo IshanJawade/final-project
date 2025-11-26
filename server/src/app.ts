@@ -15,6 +15,7 @@ import appointmentRoutes from './routes/appointment.routes';
 import doctorRoutes from './routes/doctor.routes';
 import specializationRoutes from './routes/specialization.routes';
 import fileRoutes from './routes/file.routes';
+import adminRoutes from './routes/admin.routes';
 import { problemResponder } from './utils/problem';
 
 const app = express();
@@ -53,6 +54,7 @@ app.use('/', appointmentRoutes);
 app.use('/doctors', doctorRoutes);
 app.use('/specializations', specializationRoutes);
 app.use('/', fileRoutes);
+app.use('/admin', adminRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({

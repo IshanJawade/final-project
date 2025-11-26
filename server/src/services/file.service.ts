@@ -32,23 +32,27 @@ const buildSignature = (payload: string) => {
   return crypto.createHmac('sha256', env.FILE_SIGNING_SECRET).update(payload).digest('hex');
 };
 
-const dynamicImport = new Function('specifier', 'return import(specifier);') as <T>(specifier: string) => Promise<T>;
-
-let fileTypeFromBufferRef: typeof import('file-type').fileTypeFromBuffer | null = null;
-
 const detectFileType = async (buffer: Buffer) => {
-  if (!fileTypeFromBufferRef) {
-    const mod = await dynamicImport<typeof import('file-type')>('file-type');
-    fileTypeFromBufferRef = mod.fileTypeFromBuffer ?? null;
+  try {
+    const { fileTypeFromBuffer } = await import('file-type');
+    const detected = await fileTypeFromBuffer(buffer);
+    if (process.env.DEBUG_FILE_SERVICE === '1') {
+      console.log('detectFileType result', detected);
+    }
+    return detected;
+  } catch (err) {
+    if (process.env.DEBUG_FILE_SERVICE === '1') {
+      console.error('detectFileType error', err);
+    }
+    throw new ProblemDetails({ status: 500, title: 'File type detection failed' });
   }
-  if (!fileTypeFromBufferRef) {
-    throw new ProblemDetails({ status: 500, title: 'File type detector unavailable' });
-  }
-  return fileTypeFromBufferRef(buffer);
 };
 
 export const fileService = {
   async validateBuffer(buffer: Buffer, originalName: string) {
+    if (process.env.DEBUG_FILE_SERVICE === '1') {
+      console.log('validateBuffer start', { size: buffer?.length, originalName });
+    }
     if (!buffer || buffer.length === 0) {
       throw new ProblemDetails({ status: 400, title: 'Empty file upload' });
     }
@@ -64,6 +68,9 @@ export const fileService = {
     }
 
     const detected = await detectFileType(buffer);
+    if (process.env.DEBUG_FILE_SERVICE === '1') {
+      console.log('validateBuffer detected', detected);
+    }
     if (detected) {
       if (!ALLOWED_EXTENSIONS.has(detected.ext) || !ALLOWED_MIME_TYPES.has(detected.mime)) {
         throw new ProblemDetails({ status: 400, title: 'File content type not allowed' });
@@ -100,6 +107,9 @@ export const fileService = {
 
   async store(params: { buffer: Buffer; originalName: string; caseId: string }) {
     const { cleanedName, mime } = await this.validateBuffer(params.buffer, params.originalName);
+    if (process.env.DEBUG_FILE_SERVICE === '1') {
+      console.log('fileService.validateBuffer resolved', { cleanedName, mime, size: params.buffer.length });
+    }
     const checksum = sha256(params.buffer);
     const storageKey = path.posix.join(params.caseId, `${crypto.randomUUID()}-${cleanedName}`);
 
@@ -108,6 +118,9 @@ export const fileService = {
     }
 
     await this.storeLocal({ storageKey, buffer: params.buffer });
+    if (process.env.DEBUG_FILE_SERVICE === '1') {
+      console.log('fileService.storeLocal complete', { storageKey });
+    }
 
     return {
       storageKey,

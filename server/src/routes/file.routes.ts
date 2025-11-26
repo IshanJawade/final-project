@@ -58,6 +58,13 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { file: uploadedFile } = req as Request & { file?: Express.Multer.File };
+      if (process.env.DEBUG_FILE_SERVICE === '1') {
+        console.log('upload route received', {
+          body: req.body,
+          hasFile: Boolean(uploadedFile),
+          fileSize: uploadedFile?.size
+        });
+      }
       if (!uploadedFile) {
         throw new ProblemDetails({ status: 400, title: 'File is required' });
       }
@@ -69,6 +76,9 @@ router.post(
       };
 
       const parsed = FileUploadSchema.safeParse(body);
+      if (process.env.DEBUG_FILE_SERVICE === '1') {
+        console.log('upload route parsed', { success: parsed.success, data: parsed.success ? parsed.data : null, error: parsed.success ? null : parsed.error.format() });
+      }
       if (!parsed.success) {
         throw new ProblemDetails({ status: 400, title: 'Invalid upload payload', detail: parsed.error.message });
       }
@@ -82,6 +92,9 @@ router.post(
           assignedDoctor: true
         }
       });
+      if (process.env.DEBUG_FILE_SERVICE === '1') {
+        console.log('upload route caseRecord', { found: Boolean(caseRecord) });
+      }
 
       if (!caseRecord) {
         throw new ProblemDetails({ status: 404, title: 'Case not found' });
@@ -89,18 +102,27 @@ router.post(
 
       if (payload.visit_id) {
         const visit = await prisma.visit.findUnique({ where: { id: payload.visit_id } });
+        if (process.env.DEBUG_FILE_SERVICE === '1') {
+          console.log('upload route visit', { found: Boolean(visit), caseMatch: visit?.caseId === caseRecord.id });
+        }
         if (!visit || visit.caseId !== caseRecord.id) {
           throw new ProblemDetails({ status: 400, title: 'Visit does not belong to case' });
         }
       }
 
       const role = req.user?.role;
+      if (process.env.DEBUG_FILE_SERVICE === '1') {
+        console.log('upload route role', { role });
+      }
       if (!role) {
         throw new ProblemDetails({ status: 401, title: 'Not authenticated' });
       }
 
       if (role === 'DOCTOR') {
         const doctor = await authorizationService.requireDoctorProfile(req.user!.id);
+        if (process.env.DEBUG_FILE_SERVICE === '1') {
+          console.log('upload route doctor check', { doctorId: doctor.id, assignedDoctorId: caseRecord.assignedDoctorId });
+        }
         if (caseRecord.assignedDoctorId !== doctor.id) {
           throw new ProblemDetails({ status: 403, title: 'Doctor cannot upload to this case' });
         }
@@ -122,6 +144,9 @@ router.post(
         originalName: uploadedFile.originalname,
         caseId: caseRecord.id
       });
+      if (process.env.DEBUG_FILE_SERVICE === '1') {
+        console.log('upload route stored', stored);
+      }
 
       const saved = await prisma.file.create({
         data: {
@@ -146,6 +171,9 @@ router.post(
         userAgent: req.headers['user-agent'] as string,
         requestId: req.requestId
       });
+      if (process.env.DEBUG_FILE_SERVICE === '1') {
+        console.log('upload route completed');
+      }
 
       res.status(201).json({ file: serializeFile(saved) });
     } catch (err) {
