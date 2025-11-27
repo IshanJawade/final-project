@@ -32,6 +32,17 @@ export type StaffRecord = {
   };
 };
 
+export type DoctorSummary = {
+  id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  specialization_id: string | null;
+  specialization: string | null;
+  license_number: string | null;
+  is_active: boolean;
+};
+
 export type PatientSummary = {
   id: string;
   mrn: string;
@@ -91,4 +102,12 @@ export type AppointmentSummary = {
   };
   created_at: string;
   updated_at: string;
+};
+
+export type AvailabilitySlot = {
+  id: string;
+  doctorId: string;
+  start_time: string;
+  end_time: string;
+  is_booked: boolean;
 };

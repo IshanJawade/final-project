@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { CalendarCheck2, LayoutDashboard, ShieldCheck, Users, ClipboardList, UserPlus } from 'lucide-react';
+import { CalendarCheck2, LayoutDashboard, ShieldCheck, Users, ClipboardList, UserPlus, Stethoscope } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Role, UserProfile } from '../types';
 
@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { to: '/patients', label: 'Patients', icon: Users, roles: ['ADMIN', 'DOCTOR', 'RECEPTIONIST'] },
   { to: '/cases', label: 'Cases', icon: ClipboardList },
   { to: '/appointments', label: 'Appointments', icon: CalendarCheck2 },
+  { to: '/doctors', label: 'Doctors', icon: Stethoscope, roles: ['ADMIN', 'DOCTOR', 'RECEPTIONIST'] },
   { to: '/compliance', label: 'Compliance', icon: ShieldCheck, roles: ['ADMIN'] },
   { to: '/admin/staff', label: 'Staff Admin', icon: UserPlus, roles: ['ADMIN'] }
 ];

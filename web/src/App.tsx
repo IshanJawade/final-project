@@ -8,6 +8,7 @@ import { CasesPage } from './pages/Cases';
 import { AppointmentsPage } from './pages/Appointments';
 import { CompliancePage } from './pages/Compliance';
 import { AdminStaffPage } from './pages/AdminStaff';
+import { DoctorDirectoryPage } from './pages/DoctorDirectory';
 import { LoginPage } from './pages/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -50,6 +51,7 @@ const AppContent = () => {
         <Route path="/patients" element={<PatientsPage />} />
         <Route path="/cases" element={<CasesPage />} />
         <Route path="/appointments" element={<AppointmentsPage />} />
+        <Route path="/doctors" element={<DoctorDirectoryPage />} />
         <Route path="/compliance" element={<CompliancePage />} />
         <Route path="/admin/staff" element={<AdminStaffPage />} />
       </Routes>
