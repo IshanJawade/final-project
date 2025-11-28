@@ -12,11 +12,39 @@ const SPECIALIZATIONS = [
   'Oncology'
 ];
 
-const AVAILABILITY_SLOTS = [
-  { start: '2025-01-02T09:00:00Z', end: '2025-01-02T09:30:00Z' },
-  { start: '2025-01-02T09:45:00Z', end: '2025-01-02T10:15:00Z' },
-  { start: '2025-01-02T10:30:00Z', end: '2025-01-02T11:00:00Z' }
-];
+// Generate availability slots for a doctor (10 AM to 5 PM, 1 hour slots, for the next 30 days)
+function generateAvailabilitySlots(startDate: Date = new Date(), days: number = 30) {
+  const slots: Array<{ start: Date; end: Date }> = [];
+  const today = new Date(startDate);
+  today.setHours(0, 0, 0, 0);
+
+  for (let dayOffset = 0; dayOffset < days; dayOffset++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + dayOffset);
+
+    // Skip weekends (Saturday = 6, Sunday = 0)
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      continue;
+    }
+
+    // Generate slots from 10 AM to 5 PM (1 hour each)
+    for (let hour = 10; hour < 17; hour++) {
+      const start = new Date(date);
+      start.setHours(hour, 0, 0, 0);
+      
+      const end = new Date(date);
+      end.setHours(hour + 1, 0, 0, 0);
+
+      // Only add slots that are in the future
+      if (start.getTime() > Date.now()) {
+        slots.push({ start, end });
+      }
+    }
+  }
+
+  return slots;
+}
 
 async function upsertSpecializations() {
   const map = new Map<string, string>();
@@ -177,13 +205,15 @@ async function seedUsers(specializationMap: Map<string, string>) {
     }
   });
 
+  // Generate and create availability slots for this doctor
+  const availabilitySlots = generateAvailabilitySlots();
   await prisma.availabilitySlot.deleteMany({ where: { doctorId: doctorProfile.id } });
-  for (const slot of AVAILABILITY_SLOTS) {
+  for (const slot of availabilitySlots) {
     await prisma.availabilitySlot.create({
       data: {
         doctorId: doctorProfile.id,
-        start_time: new Date(slot.start),
-        end_time: new Date(slot.end)
+        start_time: slot.start,
+        end_time: slot.end
       }
     });
   }
@@ -251,9 +281,47 @@ async function seedUsers(specializationMap: Map<string, string>) {
   return { adminUser, doctorUser, receptionistUser, patientUser };
 }
 
+async function seedAllDoctorsAvailability() {
+  // Get all active doctors
+  const doctors = await prisma.doctorProfile.findMany({
+    where: {
+      user: {
+        is_active: true
+      }
+    }
+  });
+
+  console.log(`Generating availability slots for ${doctors.length} doctor(s)...`);
+
+  // Generate availability slots for each doctor
+  for (const doctor of doctors) {
+    const availabilitySlots = generateAvailabilitySlots();
+    
+    // Delete existing slots for this doctor
+    await prisma.availabilitySlot.deleteMany({ where: { doctorId: doctor.id } });
+    
+    // Create new slots
+    for (const slot of availabilitySlots) {
+      await prisma.availabilitySlot.create({
+        data: {
+          doctorId: doctor.id,
+          start_time: slot.start,
+          end_time: slot.end
+        }
+      });
+    }
+    
+    console.log(`  Created ${availabilitySlots.length} availability slots for doctor ${doctor.id}`);
+  }
+}
+
 async function main() {
   const specializationMap = await upsertSpecializations();
   await seedUsers(specializationMap);
+  
+  // Generate availability for all doctors (including any that might exist already)
+  await seedAllDoctorsAvailability();
+  
   console.log('Seed data ready: default users, specializations, availability, sample case.');
 }
 

@@ -2,7 +2,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
-import { AppointmentSummary, CaseSummary, DoctorSummary, PatientSummary, SpecializationSummary } from '../types';
+import { AppointmentSummary, AvailabilitySlot, CaseSummary, DoctorSummary, PatientSummary, SpecializationSummary } from '../types';
 
 const describeError = (error: unknown) => {
   if (error instanceof ApiError) {
@@ -44,45 +44,83 @@ type HourSlice = {
   end: string;
 };
 
-// Generate simple 1-hour slots from 9 AM to 4 PM for the next 14 days
-const generateSimpleSlots = (): HourSlice[] => {
-  const slots: HourSlice[] = [];
+// Generate calendar days for next 3 days
+const generateCalendarDays = () => {
+  const days: Date[] = [];
   const now = new Date();
-  const startHour = 9; // 9 AM
-  const endHour = 16; // 4 PM (16:00)
-  const daysAhead = 14;
-
-  for (let day = 0; day < daysAhead; day++) {
+  now.setHours(0, 0, 0, 0);
+  
+  for (let i = 0; i < 3; i++) {
     const date = new Date(now);
-    date.setDate(date.getDate() + day);
-    date.setHours(0, 0, 0, 0);
-
-    for (let hour = startHour; hour < endHour; hour++) {
-      const slotStart = new Date(date);
-      slotStart.setHours(hour, 0, 0, 0);
-
-      const slotEnd = new Date(date);
-      slotEnd.setHours(hour + 1, 0, 0, 0);
-
-      // Only include future slots
-      if (slotStart.getTime() >= now.getTime()) {
-        slots.push({
-          id: `${date.toISOString().split('T')[0]}-${hour}`,
-          start: slotStart.toISOString(),
-          end: slotEnd.toISOString()
-        });
-      }
-    }
+    date.setDate(date.getDate() + i);
+    days.push(date);
   }
+  
+  return days;
+};
 
+// Generate time slots from 10 AM to 5 PM
+const generateTimeSlots = () => {
+  const slots: string[] = [];
+  for (let hour = 10; hour < 17; hour++) {
+    slots.push(`${hour.toString().padStart(2, '0')}:00`);
+  }
   return slots;
 };
 
-const sliceLabel = (slice: HourSlice) => {
-  const start = new Date(slice.start);
-  const datePart = start.toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' });
-  const startTime = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return `${datePart} at ${startTime}`;
+// Check if a slot is available
+const isSlotAvailable = (
+  date: Date,
+  hour: number,
+  availabilitySlots: AvailabilitySlot[],
+  appointments: AppointmentSummary[]
+): { available: boolean; booked: boolean; hasAppointment: boolean } => {
+  const slotStart = new Date(date);
+  slotStart.setHours(hour, 0, 0, 0);
+  const slotEnd = new Date(date);
+  slotEnd.setHours(hour + 1, 0, 0, 0);
+
+  // Check if slot is in the past
+  if (slotStart.getTime() < Date.now()) {
+    return { available: false, booked: false, hasAppointment: false };
+  }
+
+  // Check if there's an appointment at this time (only future appointments)
+  const now = Date.now();
+  const hasAppointment = appointments.some((apt) => {
+    const aptStart = new Date(apt.start_time);
+    const aptEnd = new Date(apt.end_time);
+    return (
+      aptStart.getTime() >= now && // Only consider future appointments
+      aptStart.getTime() < slotEnd.getTime() &&
+      aptEnd.getTime() > slotStart.getTime() &&
+      apt.status === 'SCHEDULED'
+    );
+  });
+
+  if (hasAppointment) {
+    return { available: false, booked: true, hasAppointment: true };
+  }
+
+  // Check if slot is in doctor's availability and not booked
+  const matchingSlot = availabilitySlots.find((slot) => {
+    const slotStartTime = new Date(slot.start_time);
+    const slotEndTime = new Date(slot.end_time);
+    return (
+      slotStartTime.getTime() <= slotStart.getTime() &&
+      slotEndTime.getTime() >= slotEnd.getTime()
+    );
+  });
+
+  // If slot is booked in availability, mark it as booked
+  if (matchingSlot && matchingSlot.is_booked) {
+    return { available: false, booked: true, hasAppointment: false };
+  }
+
+  // If slot exists in availability and is not booked, it's available
+  const isInAvailability = matchingSlot !== undefined && !matchingSlot.is_booked;
+
+  return { available: isInAvailability, booked: false, hasAppointment: false };
 };
 
 const formatPatientName = (patient: PatientSummary) => `${patient.first_name} ${patient.last_name}`.trim();
@@ -117,6 +155,12 @@ export const AppointmentsPage = () => {
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [confirmationModal, setConfirmationModal] = useState<{
+    show: boolean;
+    patientName: string;
+    doctorName: string;
+    appointmentTime: string;
+  } | null>(null);
 
   const params = useMemo(() => {
     const query = new URLSearchParams({ limit: '50' });
@@ -138,6 +182,20 @@ export const AppointmentsPage = () => {
   const errorMessage = error instanceof Error ? error.message : 'Failed to load appointments.';
 
   const canSchedule = user.role === 'ADMIN' || user.role === 'RECEPTIONIST';
+  const isDoctor = user.role === 'DOCTOR';
+  
+  // Get doctor's own profile ID if user is a doctor
+  const doctorOwnProfileQuery = useQuery({
+    queryKey: ['doctor-own-profile', user.id],
+    queryFn: async () => {
+      const doctors = await authedRequest<{ data: DoctorSummary[] }>('/doctors?limit=100');
+      const ownProfile = doctors.data.find((d) => d.user_id === user.id);
+      return ownProfile;
+    },
+    enabled: isDoctor
+  });
+
+  const doctorOwnId = doctorOwnProfileQuery.data?.id;
   
   // Patient search
   const patientSearchParams = useMemo(() => {
@@ -192,15 +250,60 @@ export const AppointmentsPage = () => {
     setScheduleError(null);
   }, [selectedCase?.id]);
 
-  // Generate simple slots (9 AM - 4 PM, 1 hour each, next 14 days)
-  const hourlySlices = useMemo(() => generateSimpleSlots(), []);
-  const selectedSlice = useMemo(() => hourlySlices.find((slice) => slice.id === selectedSliceId) ?? null, [hourlySlices, selectedSliceId]);
+  // Get doctor availability for calendar
+  const doctorIdForAvailability = isDoctor
+    ? doctorOwnId
+    : selectedCase?.assigned_doctor?.id || (newCaseForm.doctorId || null);
+  const availabilityRange = useMemo(() => {
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    const to = new Date();
+    to.setDate(to.getDate() + 3);
+    to.setHours(23, 59, 59, 999);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, []);
 
-  useEffect(() => {
-    if (selectedSliceId && !hourlySlices.some((slice) => slice.id === selectedSliceId)) {
-      setSelectedSliceId(null);
-    }
-  }, [hourlySlices, selectedSliceId]);
+  const doctorAvailabilityQuery = useQuery({
+    queryKey: ['doctor-availability', doctorIdForAvailability, availabilityRange],
+    queryFn: () =>
+      authedRequest<{ data: AvailabilitySlot[] }>(
+        `/doctors/${doctorIdForAvailability}/availability?from=${encodeURIComponent(availabilityRange.from)}&to=${encodeURIComponent(availabilityRange.to)}&include_booked=true`
+      ),
+    enabled: Boolean(doctorIdForAvailability)
+  });
+
+  const doctorAvailability = doctorAvailabilityQuery.data?.data ?? [];
+
+  // Get doctor's appointments for calendar
+  const doctorAppointmentsQuery = useQuery({
+    queryKey: ['doctor-appointments', doctorIdForAvailability, availabilityRange],
+    queryFn: () =>
+      authedRequest<{ data: AppointmentSummary[] }>(
+        `/appointments?doctor_id=${encodeURIComponent(doctorIdForAvailability!)}&from=${encodeURIComponent(availabilityRange.from)}&to=${encodeURIComponent(availabilityRange.to)}&limit=200`
+      ),
+    enabled: Boolean(doctorIdForAvailability)
+  });
+
+  const doctorAppointments = doctorAppointmentsQuery.data?.data ?? [];
+
+  const calendarDays = useMemo(() => generateCalendarDays(), []);
+  const timeSlots = useMemo(() => generateTimeSlots(), []);
+
+  // Parse selected slot ID (format: YYYY-MM-DD@HH)
+  const selectedSlot = useMemo(() => {
+    if (!selectedSliceId) return null;
+    // Split on '@' to separate date and hour
+    const [dateStr, hourStr] = selectedSliceId.split('@');
+    if (!dateStr || !hourStr) return null;
+    const date = new Date(dateStr + 'T00:00:00'); // Add time to avoid timezone issues
+    const hour = parseInt(hourStr, 10);
+    if (isNaN(hour)) return null;
+    const start = new Date(date);
+    start.setHours(hour, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(hour + 1, 0, 0, 0);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }, [selectedSliceId]);
 
   const updateAppointmentMutation = useMutation<{ appointment: AppointmentSummary }, unknown, { appointmentId: string; status: AppointmentSummary['status'] }>({
     mutationFn: ({ appointmentId, status }) => {
@@ -210,7 +313,10 @@ export const AppointmentsPage = () => {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && queryItem.queryKey[0] === 'appointments' });
+      // Invalidate all appointment-related queries
+      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && (queryItem.queryKey[0] === 'appointments' || queryItem.queryKey[0] === 'doctor-appointments') });
+      // Also invalidate availability queries since slots get marked as booked
+      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && queryItem.queryKey[0] === 'doctor-availability' });
     }
   });
 
@@ -276,12 +382,46 @@ export const AppointmentsPage = () => {
     },
     onSuccess: (response) => {
       setScheduleError(null);
-      setScheduleMessage(`Created case ${response.case.case_code} and scheduled appointment for ${new Date(response.appointment.start_time).toLocaleString()}.`);
-      setSelectedSliceId(null);
-      setSelectedCase(null);
-      setNewCaseForm({ doctorId: '', summary: '', symptoms_text: '' });
+      setScheduleMessage(null);
+      
+      // Get patient name
+      const patientName = selectedPatient 
+        ? `${selectedPatient.first_name} ${selectedPatient.last_name}`
+        : response.appointment.patient 
+        ? `${response.appointment.patient.first_name} ${response.appointment.patient.last_name}`
+        : 'Unknown Patient';
+      
+      // Get doctor name
+      const doctorName = response.appointment.doctor
+        ? `Dr. ${response.appointment.doctor.first_name} ${response.appointment.doctor.last_name}`
+        : 'Unknown Doctor';
+      
+      // Format appointment time
+      const appointmentTime = new Date(response.appointment.start_time).toLocaleString([], {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Show confirmation modal
+      setConfirmationModal({
+        show: true,
+        patientName,
+        doctorName,
+        appointmentTime
+      });
+      
+      // Invalidate all appointment-related queries
       queryClient.invalidateQueries({ queryKey: ['patient-cases'] });
-      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && queryItem.queryKey[0] === 'appointments' });
+      // Invalidate appointment queries - this will refresh both the list and doctor's calendar
+      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && (queryItem.queryKey[0] === 'appointments' || queryItem.queryKey[0] === 'doctor-appointments') });
+      // Also invalidate availability queries since slots get marked as booked
+      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && queryItem.queryKey[0] === 'doctor-availability' });
+      // Force refetch to ensure immediate update
+      queryClient.refetchQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && (queryItem.queryKey[0] === 'doctor-appointments' || queryItem.queryKey[0] === 'doctor-availability') });
     },
     onError: (err) => {
       setScheduleMessage(null);
@@ -303,9 +443,44 @@ export const AppointmentsPage = () => {
     },
     onSuccess: (response) => {
       setScheduleError(null);
-      setScheduleMessage(`Scheduled appointment for ${new Date(response.appointment.start_time).toLocaleString()}.`);
-      setSelectedSliceId(null);
-      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && queryItem.queryKey[0] === 'appointments' });
+      setScheduleMessage(null);
+      
+      // Get patient name
+      const patientName = selectedPatient 
+        ? `${selectedPatient.first_name} ${selectedPatient.last_name}`
+        : response.appointment.patient 
+        ? `${response.appointment.patient.first_name} ${response.appointment.patient.last_name}`
+        : 'Unknown Patient';
+      
+      // Get doctor name
+      const doctorName = response.appointment.doctor
+        ? `Dr. ${response.appointment.doctor.first_name} ${response.appointment.doctor.last_name}`
+        : 'Unknown Doctor';
+      
+      // Format appointment time
+      const appointmentTime = new Date(response.appointment.start_time).toLocaleString([], {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Show confirmation modal
+      setConfirmationModal({
+        show: true,
+        patientName,
+        doctorName,
+        appointmentTime
+      });
+      
+      // Invalidate all appointment-related queries
+      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && (queryItem.queryKey[0] === 'appointments' || queryItem.queryKey[0] === 'doctor-appointments') });
+      // Also invalidate availability queries since slots get marked as booked
+      queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && queryItem.queryKey[0] === 'doctor-availability' });
+      // Force refetch to ensure immediate update
+      queryClient.refetchQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && (queryItem.queryKey[0] === 'doctor-appointments' || queryItem.queryKey[0] === 'doctor-availability') });
     },
     onError: (err) => {
       setScheduleMessage(null);
@@ -318,12 +493,29 @@ export const AppointmentsPage = () => {
     createPatientMutation.mutate(newPatientForm);
   };
 
+  const handleCloseConfirmation = () => {
+    setConfirmationModal(null);
+    // Reset form state
+    setSelectedSliceId(null);
+    setSelectedCase(null);
+    setSelectedPatient(null);
+    setNewCaseForm({ doctorId: '', summary: '', symptoms_text: '' });
+    setSelectedSpecialization('');
+    setPatientSearchQuery('');
+    setShowNewPatientForm(false);
+  };
+
   const handleSchedule = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setScheduleMessage(null);
     setScheduleError(null);
 
-    if (!selectedSlice) {
+    if (!selectedSlot) {
+      setScheduleError('Select a time slot.');
+      return;
+    }
+
+    if (!selectedSlot) {
       setScheduleError('Select a time slot.');
       return;
     }
@@ -332,8 +524,8 @@ export const AppointmentsPage = () => {
       // Use existing case
       createAppointmentMutation.mutate({
         caseId: selectedCase.id,
-        startIso: selectedSlice.start,
-        endIso: selectedSlice.end
+        startIso: selectedSlot.start,
+        endIso: selectedSlot.end
       });
     } else {
       // Create new case and appointment
@@ -350,8 +542,8 @@ export const AppointmentsPage = () => {
         doctorId: newCaseForm.doctorId,
         summary: newCaseForm.summary.trim() || undefined,
         symptoms_text: newCaseForm.symptoms_text.trim() || undefined,
-        startIso: selectedSlice.start,
-        endIso: selectedSlice.end
+        startIso: selectedSlot.start,
+        endIso: selectedSlot.end
       });
     }
   };
@@ -371,6 +563,180 @@ export const AppointmentsPage = () => {
         <span>Doctor capacity and live queue health</span>
       </div>
 
+      {/* Doctor Calendar View */}
+      {isDoctor && doctorOwnId ? (
+        <section className="panel" style={{ marginBottom: '1.25rem' }}>
+          <header className="form-panel-header">
+            <div>
+              <h2>My Appointment Calendar</h2>
+              <p>View your scheduled appointments for the next 3 days (10 AM - 5 PM)</p>
+            </div>
+          </header>
+
+          {doctorAvailabilityQuery.isLoading || doctorAppointmentsQuery.isLoading ? (
+                <p style={{ color: 'var(--text-muted)' }}>Loading calendar...</p>
+              ) : (
+                <div
+                  style={{
+                    overflowX: 'auto',
+                    overflowY: 'visible',
+                    marginTop: '1rem',
+                    maxWidth: '100%',
+                    border: '1px solid var(--border-soft)',
+                    borderRadius: '0.5rem',
+                    position: 'relative'
+                  }}
+                  role="region"
+                  aria-label="Doctor appointment calendar"
+                >
+                    <table
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        background: 'var(--bg-primary)',
+                        margin: 0
+                      }}
+                      role="grid"
+                      aria-label="Appointment calendar"
+                    >
+                      <thead>
+                        <tr role="row">
+                          <th
+                            role="columnheader"
+                            scope="col"
+                            style={{
+                              padding: '0.75rem',
+                              textAlign: 'left',
+                              background: 'var(--bg-soft)',
+                              border: '1px solid var(--border-soft)',
+                              fontSize: '0.85rem',
+                              fontWeight: 600,
+                              position: 'sticky',
+                              left: 0,
+                              zIndex: 10,
+                              minWidth: '80px'
+                            }}
+                          >
+                            Time
+                          </th>
+                          {calendarDays.map((day) => (
+                            <th
+                              key={day.toISOString()}
+                              role="columnheader"
+                              scope="col"
+                              style={{
+                                padding: '0.75rem',
+                                textAlign: 'center',
+                                background: 'var(--bg-soft)',
+                                border: '1px solid var(--border-soft)',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                minWidth: '120px'
+                              }}
+                            >
+                              <div>{day.toLocaleDateString([], { weekday: 'short' })}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                {day.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {timeSlots.map((timeSlot, timeIndex) => {
+                          const hour = 10 + timeIndex;
+                          return (
+                            <tr key={timeSlot} role="row">
+                              <th
+                                role="rowheader"
+                                scope="row"
+                                style={{
+                                  padding: '0.75rem',
+                                  background: 'var(--bg-soft)',
+                                  border: '1px solid var(--border-soft)',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 600,
+                                  position: 'sticky',
+                                  left: 0,
+                                  zIndex: 5,
+                                  minWidth: '80px'
+                                }}
+                              >
+                                {timeSlot}
+                              </th>
+                              {calendarDays.map((day) => {
+                                const slotStatus = isSlotAvailable(day, hour, doctorAvailability, doctorAppointments);
+                                // Create slot start/end times properly
+                                const slotStart = new Date(day);
+                                slotStart.setHours(hour, 0, 0, 0);
+                                const slotEnd = new Date(day);
+                                slotEnd.setHours(hour + 1, 0, 0, 0);
+                                const isPast = slotStart.getTime() < Date.now();
+                                
+                                // Find appointment that overlaps with this slot (show all appointments in doctor's calendar)
+                                const appointmentAtSlot = doctorAppointments.find((apt) => {
+                                  const aptStart = new Date(apt.start_time);
+                                  const aptEnd = new Date(apt.end_time);
+                                  
+                                  // Check if appointment overlaps with the slot (any overlap counts)
+                                  const overlaps = aptStart.getTime() < slotEnd.getTime() && aptEnd.getTime() > slotStart.getTime();
+                                  
+                                  return overlaps;
+                                });
+
+                                const dateLabel = day.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                                const slotLabel = `${dateLabel} at ${timeSlot}`;
+                                const ariaLabel = appointmentAtSlot
+                                  ? `${slotLabel} - Appointment with ${appointmentAtSlot.patient ? `${appointmentAtSlot.patient.first_name} ${appointmentAtSlot.patient.last_name}` : 'patient'}, Case ${appointmentAtSlot.case_code}`
+                                  : `${slotLabel} - ${isPast ? 'Past' : slotStatus.available ? 'Available' : 'Not available'}`;
+
+                                let cellStyle: Record<string, string | number> = {
+                                  padding: '0.5rem',
+                                  border: '1px solid var(--border-soft)',
+                                  textAlign: 'center',
+                                  background: isPast
+                                    ? 'var(--bg-soft)'
+                                    : appointmentAtSlot
+                                    ? 'rgba(14,165,233,0.2)'
+                                    : slotStatus.available
+                                    ? 'rgba(34,197,94,0.1)'
+                                    : 'rgba(148,163,184,0.05)',
+                                  minWidth: '120px'
+                                };
+
+                                return (
+                                  <td key={day.toISOString()} role="gridcell" style={cellStyle} aria-label={ariaLabel}>
+                                    {isPast ? (
+                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Past</span>
+                                    ) : appointmentAtSlot ? (
+                                      <div style={{ fontSize: '0.75rem' }}>
+                                        <div style={{ fontWeight: 600, color: '#0ea5e9', marginBottom: '0.25rem' }}>
+                                          {appointmentAtSlot.patient
+                                            ? `${appointmentAtSlot.patient.first_name} ${appointmentAtSlot.patient.last_name}`
+                                            : 'Appointment'}
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                          {appointmentAtSlot.case_code}
+                                        </div>
+                                      </div>
+                                    ) : slotStatus.available ? (
+                                      <span style={{ color: '#22c55e', fontSize: '0.75rem' }}>Available</span>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
+
       {canSchedule ? (
         <section className="panel" style={{ marginBottom: '1.25rem' }}>
           <header className="form-panel-header">
@@ -384,7 +750,7 @@ export const AppointmentsPage = () => {
           <div style={{ marginBottom: '1.5rem' }}>
             <h3 style={{ marginTop: 0, marginBottom: '0.75rem' }}>Step 1: Find or Create Patient</h3>
             <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
-              <input
+                  <input
                 type="text"
                 value={patientSearchQuery}
                 onChange={(e) => setPatientSearchQuery(e.target.value)}
@@ -397,8 +763,8 @@ export const AppointmentsPage = () => {
                 onClick={() => setShowNewPatientForm(!showNewPatientForm)}
               >
                 {showNewPatientForm ? 'Cancel' : '+ New Patient'}
-              </button>
-            </div>
+                  </button>
+                </div>
 
             {showNewPatientForm ? (
               <form onSubmit={handleCreatePatient} className="form-grid" style={{ marginTop: '0.75rem', padding: '1rem', background: 'var(--bg-soft)', borderRadius: '0.5rem' }}>
@@ -439,7 +805,7 @@ export const AppointmentsPage = () => {
                     {createPatientMutation.isPending ? 'Creating...' : 'Create Patient'}
                   </button>
                 </div>
-              </form>
+            </form>
             ) : null}
 
             {patientSearchQuery_result.isLoading ? (
@@ -465,7 +831,7 @@ export const AppointmentsPage = () => {
                     <strong>{patient.patient_code}</strong> · {patient.first_name} {patient.last_name} · MRN: {patient.mrn}
                   </div>
                 ))}
-              </div>
+                </div>
             ) : patientSearchQuery.trim().length >= 2 ? (
               <p style={{ color: 'var(--text-muted)' }}>No patients found. Create a new patient.</p>
             ) : null}
@@ -485,8 +851,8 @@ export const AppointmentsPage = () => {
                   Change
                 </button>
               </div>
-            ) : null}
-          </div>
+              ) : null}
+            </div>
 
           {/* Step 2: Case Selection/Creation */}
           {selectedPatient ? (
@@ -518,7 +884,7 @@ export const AppointmentsPage = () => {
                           >
                             <strong>{caseRecord.case_code}</strong> · {formatDoctor(caseRecord)}
                             {caseRecord.summary ? <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>{caseRecord.summary}</div> : null}
-                          </div>
+                        </div>
                         ))}
                       </div>
                     </div>
@@ -542,15 +908,15 @@ export const AppointmentsPage = () => {
                           >
                             <strong>{caseRecord.case_code}</strong> · {formatDoctor(caseRecord)}
                           </div>
-                        ))}
-                      </div>
+                  ))}
+                </div>
                     </details>
                   ) : null}
 
                   <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-soft)', borderRadius: '0.5rem' }}>
                     <strong style={{ display: 'block', marginBottom: '0.75rem' }}>Or Create New Case:</strong>
                     <div className="form-grid">
-                      <label>
+                <label>
                         Filter by Specialization
                         <select
                           value={selectedSpecialization}
@@ -576,21 +942,21 @@ export const AppointmentsPage = () => {
                         >
                           <option value="">Select doctor...</option>
                           {doctors.map((doctor) => (
-                            <option key={doctor.id} value={doctor.id}>
-                              {doctor.first_name} {doctor.last_name}
-                              {doctor.specialization ? ` · ${doctor.specialization}` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
+                      <option key={doctor.id} value={doctor.id}>
+                        {doctor.first_name} {doctor.last_name}
+                        {doctor.specialization ? ` · ${doctor.specialization}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
                         Summary (optional)
                         <input
                           value={newCaseForm.summary}
                           onChange={(e) => setNewCaseForm((prev) => ({ ...prev, summary: e.target.value }))}
-                          placeholder="Brief reason for visit"
-                        />
-                      </label>
+                    placeholder="Brief reason for visit"
+                  />
+                </label>
                       <label>
                         Symptoms (optional)
                         <textarea
@@ -600,11 +966,11 @@ export const AppointmentsPage = () => {
                           placeholder="Initial symptoms or complaints"
                         />
                       </label>
-                    </div>
+                </div>
                     {selectedCase ? (
                       <div className="panel" style={{ marginTop: '0.75rem', borderStyle: 'dashed', background: 'rgba(34,197,94,0.1)' }}>
                         <strong>Using existing case:</strong> {selectedCase.case_code} · {formatDoctor(selectedCase)}
-                      </div>
+          </div>
                     ) : newCaseForm.doctorId ? (
                       <div className="panel" style={{ marginTop: '0.75rem', borderStyle: 'dashed', background: 'rgba(14,165,233,0.1)' }}>
                         <strong>Will create new case</strong> with selected doctor
@@ -616,7 +982,7 @@ export const AppointmentsPage = () => {
             </div>
           ) : null}
 
-          {/* Step 3: Schedule Appointment */}
+          {/* Step 3: Schedule Appointment - Calendar View */}
           {selectedPatient && (selectedCase || newCaseForm.doctorId) ? (
             <div>
               <h3 style={{ marginTop: 0, marginBottom: '0.75rem' }}>Step 3: Select Time Slot</h3>
@@ -624,41 +990,286 @@ export const AppointmentsPage = () => {
                 {selectedCase
                   ? `Select a time slot for ${formatDoctor(selectedCase)}.`
                   : `Select a time slot. A new case will be created with the selected doctor.`}
-                {' '}Available slots are 9 AM to 4 PM, 1 hour each.
+                {' '}Available slots are 10 AM to 5 PM, 1 hour each.
               </p>
-              <form onSubmit={handleSchedule}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'grid', gap: '0.6rem', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-                    {hourlySlices.map((slice) => {
-                      const isSelected = selectedSliceId === slice.id;
-                      return (
-                        <button
-                          key={slice.id}
-                          type="button"
-                          className="primary-btn"
-                          onClick={() => setSelectedSliceId(slice.id)}
-                          style={{
-                            background: isSelected
-                              ? 'linear-gradient(135deg, rgba(14,165,233,0.35), rgba(34,211,238,0.25))'
-                              : 'linear-gradient(135deg, rgba(14,165,233,0.2), rgba(34,211,238,0.15))',
-                            color: 'var(--text-primary)',
-                            padding: '0.75rem 1rem',
-                            fontSize: '0.9rem'
-                          }}
-                        >
-                          {sliceLabel(slice)}
-                        </button>
-                      );
-                    })}
-                  </div>
+
+              {doctorAvailabilityQuery.isLoading || doctorAppointmentsQuery.isLoading ? (
+                <p style={{ color: 'var(--text-muted)' }}>Loading calendar...</p>
+              ) : doctorAvailability.length === 0 && !doctorAvailabilityQuery.isLoading ? (
+                <div className="panel" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid #dc2626' }}>
+                  <p style={{ color: '#dc2626', margin: 0 }}>
+                    <strong>No availability slots found.</strong> The doctor may not have set their availability yet.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleSchedule}>
+                  {/* Selected Slot Display */}
+                  {selectedSliceId ? (
+                    <div
+                      className="panel"
+                      style={{
+                        marginBottom: '1rem',
+                        background: 'rgba(14,165,233,0.1)',
+                        border: '2px solid var(--accent-strong)',
+                        padding: '1rem'
+                      }}
+                    >
+                      <strong style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--accent-strong)' }}>
+                        Selected Appointment Time:
+                      </strong>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                        {(() => {
+                          const [dateStr, hourStr] = selectedSliceId.split('@');
+                          if (!dateStr || !hourStr) return 'Invalid selection';
+                          const date = new Date(dateStr + 'T00:00:00');
+                          const hour = parseInt(hourStr, 10);
+                          if (isNaN(hour)) return 'Invalid selection';
+                          const dateFormatted = date.toLocaleDateString([], {
+                            weekday: 'long',
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric'
+                          });
+                          const timeFormatted = `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`;
+                          return `${dateFormatted} at ${timeFormatted}`;
+                        })()}
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="panel"
+                      style={{
+                        marginBottom: '1rem',
+                        background: 'var(--bg-soft)',
+                        padding: '0.75rem',
+                        textAlign: 'center',
+                        color: 'var(--text-muted)'
+                      }}
+                    >
+                      Click on an available time slot below to select your appointment time
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      overflowX: 'auto',
+                      overflowY: 'visible',
+                      marginBottom: '1rem',
+                      maxWidth: '100%',
+                      border: '1px solid var(--border-soft)',
+                      borderRadius: '0.5rem',
+                      position: 'relative'
+                    }}
+                    role="region"
+                    aria-label="Appointment scheduling calendar"
+                  >
+                    <table
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        background: 'var(--bg-primary)',
+                        margin: 0
+                      }}
+                      role="grid"
+                      aria-label="Time slots and availability calendar"
+                    >
+                      <thead>
+                        <tr role="row">
+                          <th
+                            role="columnheader"
+                            scope="col"
+                            style={{
+                              padding: '0.75rem',
+                              textAlign: 'left',
+                              background: 'var(--bg-soft)',
+                              border: '1px solid var(--border-soft)',
+                              fontSize: '0.85rem',
+                              fontWeight: 600,
+                              position: 'sticky',
+                              left: 0,
+                              zIndex: 10,
+                              minWidth: '80px'
+                            }}
+                          >
+                            Time
+                          </th>
+                          {calendarDays.map((day) => (
+                            <th
+                              key={day.toISOString()}
+                              role="columnheader"
+                              scope="col"
+                              style={{
+                                padding: '0.75rem',
+                                textAlign: 'center',
+                                background: 'var(--bg-soft)',
+                                border: '1px solid var(--border-soft)',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                minWidth: '120px'
+                              }}
+                            >
+                              <div>{day.toLocaleDateString([], { weekday: 'short' })}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                {day.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {timeSlots.map((timeSlot, timeIndex) => {
+                          const hour = 10 + timeIndex;
+                          return (
+                            <tr key={timeSlot} role="row">
+                              <th
+                                role="rowheader"
+                                scope="row"
+                              style={{
+                                  padding: '0.75rem',
+                                  background: 'var(--bg-soft)',
+                                  border: '1px solid var(--border-soft)',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 600,
+                                  position: 'sticky',
+                                  left: 0,
+                                  zIndex: 5,
+                                  minWidth: '80px'
+                                }}
+                              >
+                                {timeSlot}
+                              </th>
+                              {calendarDays.map((day) => {
+                                // Use '@' separator to avoid conflicts with date format
+                                const dateStr = day.toISOString().split('T')[0];
+                                const slotId = `${dateStr}@${hour}`;
+                                const slotStatus = isSlotAvailable(day, hour, doctorAvailability, doctorAppointments);
+                                const isSelected = selectedSliceId === slotId;
+                                const slotStart = new Date(day);
+                                slotStart.setHours(hour, 0, 0, 0);
+                                const isPast = slotStart.getTime() < Date.now();
+                                const isClickable = slotStatus.available && !isPast;
+
+                                let cellStyle: Record<string, string | number> = {
+                                  padding: '0.75rem',
+                                  border: '1px solid var(--border-soft)',
+                                  textAlign: 'center',
+                                  cursor: isClickable ? 'pointer' : 'default',
+                                  background: isPast
+                                    ? 'var(--bg-soft)'
+                                    : slotStatus.hasAppointment
+                                    ? 'rgba(239,68,68,0.15)'
+                                    : slotStatus.booked
+                                    ? 'rgba(148,163,184,0.15)'
+                                    : slotStatus.available
+                                    ? isSelected
+                                      ? 'rgba(14,165,233,0.3)'
+                                      : 'rgba(34,197,94,0.1)'
+                                    : 'rgba(148,163,184,0.05)',
+                                  borderColor: isSelected ? 'var(--accent-strong)' : 'var(--border-soft)',
+                                  borderWidth: isSelected ? '2px' : '1px',
+                                  transition: 'all 0.2s',
+                                  minWidth: '120px'
+                                };
+
+
+                                const dateLabel = day.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                                const slotLabel = `${dateLabel} at ${timeSlot}`;
+                                const ariaLabel = isPast
+                                  ? `${slotLabel} - Past slot`
+                                  : slotStatus.hasAppointment
+                                  ? `${slotLabel} - Booked appointment`
+                                  : slotStatus.available
+                                  ? `${slotLabel} - Available${isSelected ? ' (Selected)' : ''}`
+                                  : `${slotLabel} - Not available`;
+
+                                return (
+                                  <td
+                                    key={day.toISOString()}
+                                    role="gridcell"
+                                    style={{
+                                      padding: '0.5rem',
+                                      border: '1px solid var(--border-soft)',
+                                      textAlign: 'center',
+                                      minWidth: '120px',
+                                      verticalAlign: 'middle'
+                                    }}
+                                  >
+                                    {isPast ? (
+                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Past</span>
+                                    ) : slotStatus.hasAppointment ? (
+                                      <span style={{ color: '#dc2626', fontSize: '0.75rem', fontWeight: 600 }}>Booked</span>
+                                    ) : slotStatus.available ? (
+                            <button
+                              type="button"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          console.log('Slot clicked:', slotId);
+                                          setSelectedSliceId(slotId);
+                                        }}
+                              className="primary-btn"
+                              style={{
+                                          width: '100%',
+                                          padding: '0.75rem 0.5rem',
+                                          border: isSelected ? '2px solid var(--accent-strong)' : '2px solid #22c55e',
+                                          borderRadius: '0.5rem',
+                                background: isSelected
+                                            ? 'var(--accent-strong)' 
+                                            : '#22c55e',
+                                          color: 'white',
+                                          fontSize: '0.9rem',
+                                          fontWeight: 700,
+                                          cursor: 'pointer',
+                                          transition: 'all 0.2s',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '0.25rem',
+                                          boxShadow: isSelected 
+                                            ? '0 2px 8px rgba(14,165,233,0.3)' 
+                                            : '0 2px 4px rgba(34,197,94,0.2)',
+                                          position: 'relative',
+                                          zIndex: 1
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (!isSelected) {
+                                            e.currentTarget.style.background = '#16a34a';
+                                            e.currentTarget.style.transform = 'scale(1.05)';
+                                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(34,197,94,0.3)';
+                                          }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (!isSelected) {
+                                            e.currentTarget.style.background = '#22c55e';
+                                            e.currentTarget.style.transform = 'scale(1)';
+                                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(34,197,94,0.2)';
+                                          }
+                                        }}
+                                        aria-label={ariaLabel}
+                                        aria-pressed={isSelected}
+                                      >
+                                        {isSelected ? '✓ Selected' : '✓ Available'}
+                            </button>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
+                                    )}
+                                  </td>
+                          );
+                        })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                      </div>
 
                   <div className="form-actions" style={{ marginTop: '1rem' }}>
-                    <button
-                      className="primary-btn"
-                      type="submit"
+                      <button
+                        className="primary-btn"
+                        type="submit"
                       disabled={
                         (createCaseAndAppointmentMutation.isPending || createAppointmentMutation.isPending) ||
-                        !selectedSlice ||
+                        !selectedSlot ||
                         (!selectedCase && !newCaseForm.doctorId)
                       }
                     >
@@ -667,12 +1278,92 @@ export const AppointmentsPage = () => {
                         : selectedCase
                         ? 'Schedule Appointment'
                         : 'Create Case & Schedule Appointment'}
-                    </button>
+                      </button>
                   </div>
-                </div>
-              </form>
+                </form>
+              )}
+
               {scheduleError ? <div className="feedback error" style={{ marginTop: '0.75rem' }}>{scheduleError}</div> : null}
               {scheduleMessage ? <div className="feedback success" style={{ marginTop: '0.75rem' }}>{scheduleMessage}</div> : null}
+              
+              {/* Confirmation Modal */}
+              {confirmationModal?.show ? (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'var(--bg-base)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }}
+                  onClick={() => {
+                    // Close modal when clicking outside
+                    handleCloseConfirmation();
+                  }}
+                >
+                  <div
+                    className="panel"
+                    style={{
+                      maxWidth: '500px',
+                      width: '100%',
+                      padding: '2rem',
+                      background: 'var(--bg-panel)',
+                      borderRadius: '0.75rem',
+                      boxShadow: 'var(--shadow-soft)',
+                      border: '2px solid var(--border-soft)'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <h2 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--accent-strong)' }}>
+                      ✓ Appointment Scheduled Successfully
+                    </h2>
+                    
+                    <div style={{ marginBottom: '1.5rem' }}>
+                      <div style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-soft)', borderRadius: '0.5rem', border: '1px solid var(--border-soft)' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 500 }}>Patient</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {confirmationModal.patientName}
+                        </div>
+                      </div>
+                      
+                      <div style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-soft)', borderRadius: '0.5rem', border: '1px solid var(--border-soft)' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 500 }}>Doctor</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {confirmationModal.doctorName}
+                        </div>
+                      </div>
+                      
+                      <div style={{ padding: '1rem', background: 'var(--bg-soft)', borderRadius: '0.5rem', border: '1px solid var(--border-soft)' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 500 }}>Appointment Time</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {confirmationModal.appointmentTime}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        onClick={handleCloseConfirmation}
+                        style={{
+                          padding: '0.75rem 2rem',
+                          fontSize: '1rem',
+                          fontWeight: 600
+                        }}
+                      >
+                        Okay
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : selectedPatient ? (
             <p style={{ color: 'var(--text-muted)' }}>Select an existing case or create a new one to continue.</p>
@@ -759,9 +1450,9 @@ export const AppointmentsPage = () => {
                         <option value="NO_SHOW">NO_SHOW</option>
                       </select>
                     ) : (
-                      <span className="status-pill" style={{ fontSize: '0.7rem' }}>
-                        {appointment.status}
-                      </span>
+                    <span className="status-pill" style={{ fontSize: '0.7rem' }}>
+                      {appointment.status}
+                    </span>
                     )}
                   </td>
                 </tr>

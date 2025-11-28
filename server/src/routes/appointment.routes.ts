@@ -81,11 +81,16 @@ const buildAppointmentFilters = async (role: string, userId: string, query: Appo
   }
 
   if (role === 'ADMIN' || role === 'RECEPTIONIST') {
+    // Admin and receptionist can query any doctor's appointments if doctor_id is provided
+    // If doctor_id is not provided, they see all appointments
     return where;
   }
 
   if (role === 'DOCTOR') {
+    // Doctors can only see their own appointments
+    // If doctor_id is provided in query, ignore it and use their own ID
     const doctor = await authorizationService.requireDoctorProfile(userId);
+    // Always filter to the doctor's own appointments, ignoring any doctor_id in query
     where.doctorId = doctor.id;
     return where;
   }
@@ -106,9 +111,11 @@ const assertNoConflicts = async (
   end: Date,
   excludeAppointmentId?: string
 ) => {
+  // Only check for conflicts with future appointments
+  const now = new Date();
   const baseWhere = {
-    start_time: { lt: end },
-    end_time: { gt: start },
+    start_time: { lt: end, gte: now }, // Appointment must start before our end time and be in the future
+    end_time: { gt: start }, // Appointment must end after our start time
     status: 'SCHEDULED' as const,
     ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {})
   };
@@ -137,6 +144,8 @@ const assertNoConflicts = async (
 };
 
 const markAvailabilitySlot = async (doctorId: string, start: Date, end: Date, isBooked: boolean) => {
+  // Find the availability slot that contains this appointment time
+  // The slot should start before or at the appointment start and end after or at the appointment end
   const slot = await prisma.availabilitySlot.findFirst({
     where: {
       doctorId,
@@ -147,7 +156,13 @@ const markAvailabilitySlot = async (doctorId: string, start: Date, end: Date, is
   });
 
   if (slot && slot.is_booked !== isBooked) {
-    await prisma.availabilitySlot.update({ where: { id: slot.id }, data: { is_booked: isBooked } });
+    await prisma.availabilitySlot.update({ 
+      where: { id: slot.id }, 
+      data: { is_booked: isBooked } 
+    });
+  } else if (!slot) {
+    // Log warning if no matching slot found (shouldn't happen in normal flow)
+    console.warn(`No availability slot found for doctor ${doctorId} covering ${start.toISOString()} to ${end.toISOString()}`);
   }
 };
 
@@ -205,6 +220,15 @@ router.get(
         orderBy: { start_time: 'asc' },
         take: filters.limit
       });
+
+      // Debug: Log the filter to verify correct doctor filtering
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Appointments Query] Role: ${req.user!.role}, UserId: ${req.user!.id}, Where:`, JSON.stringify(where, null, 2));
+        console.log(`[Appointments Query] Found ${appointments.length} appointments`);
+        if (appointments.length > 0) {
+          console.log(`[Appointments Query] First appointment doctorId: ${(appointments[0] as any).doctorId}`);
+        }
+      }
 
       res.json({ data: appointments.map((appt: any) => serializeAppointmentForRole(appt as AppointmentWithRelations, req.user!.role, req.user!.id)) });
     } catch (err) {
@@ -265,10 +289,16 @@ router.post(
 
       await assertNoConflicts(caseRecord.assignedDoctorId, caseRecord.patientId, start, end);
 
+      // Ensure we're using the correct doctor ID from the case
+      const doctorIdForAppointment = caseRecord.assignedDoctorId;
+      if (!doctorIdForAppointment) {
+        throw new ProblemDetails({ status: 400, title: 'Case does not have an assigned doctor' });
+      }
+
       const appointment = await prisma.appointment.create({
         data: {
           caseId: caseRecord.id,
-          doctorId: caseRecord.assignedDoctorId,
+          doctorId: doctorIdForAppointment, // Explicitly use the case's assigned doctor
           patientId: caseRecord.patientId,
           start_time: start,
           end_time: end,
@@ -277,6 +307,11 @@ router.post(
         },
         include: APPOINTMENT_INCLUDE
       });
+
+      // Debug: Verify appointment was created with correct doctor
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Appointment Created] ID: ${appointment.id}, DoctorId: ${appointment.doctorId}, CaseId: ${caseRecord.id}, CreatedBy: ${req.user!.id} (${req.user!.role})`);
+      }
 
       await markAvailabilitySlot(caseRecord.assignedDoctorId, start, end, true);
 
