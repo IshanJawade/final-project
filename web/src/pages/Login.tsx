@@ -84,6 +84,27 @@ export const LoginPage = () => {
     }
   };
 
+  // Quick login handlers for testing
+  const handleQuickLogin = async (email: string, password: string, isPatient: boolean = false) => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      if (isPatient) {
+        await loginPatient({ identifier: email, password });
+      } else {
+        await loginStaff({ email, password });
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.detail ?? err.message);
+      } else {
+        setError('Quick login failed. Please try again.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="auth-layout">
       <div className="auth-card">
@@ -232,6 +253,86 @@ export const LoginPage = () => {
         <footer>
           <small>Security monitoring active • Device fingerprint bound per session.</small>
         </footer>
+
+        {/* Quick Login Buttons for Testing */}
+        <div style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(234,179,8,0.1)', borderRadius: '0.5rem', border: '1px dashed rgba(234,179,8,0.3)' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>
+            🧪 Testing Quick Login
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin('admin@example.com', 'Admin!234', false)}
+              disabled={isSubmitting}
+              style={{
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.85rem',
+                background: 'var(--accent-strong)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.25rem',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting ? 0.6 : 1
+              }}
+            >
+              Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin('drhouse@example.com', 'Doctor!234', false)}
+              disabled={isSubmitting}
+              style={{
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.85rem',
+                background: 'var(--accent-strong)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.25rem',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting ? 0.6 : 1
+              }}
+            >
+              Doctor
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin('frontdesk@example.com', 'Reception!234', false)}
+              disabled={isSubmitting}
+              style={{
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.85rem',
+                background: 'var(--accent-strong)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.25rem',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting ? 0.6 : 1
+              }}
+            >
+              Receptionist
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin('patient@example.com', 'Patient!234', true)}
+              disabled={isSubmitting}
+              style={{
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.85rem',
+                background: 'var(--accent-strong)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.25rem',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting ? 0.6 : 1
+              }}
+            >
+              Patient
+            </button>
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', textAlign: 'center' }}>
+            Remove before production
+          </div>
+        </div>
       </div>
     </div>
   );
