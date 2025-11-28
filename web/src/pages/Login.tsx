@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ApiError } from '../lib/api';
+import { ApiError, apiRequest } from '../lib/api';
 
 const STAFF_MODE = 'staff';
 const PATIENT_MODE = 'patient';
@@ -17,6 +17,17 @@ export const LoginPage = () => {
 
   const [patientIdentifier, setPatientIdentifier] = useState('');
   const [patientPassword, setPatientPassword] = useState('');
+  const [showRegister, setShowRegister] = useState(false);
+  const [registerForm, setRegisterForm] = useState({
+    mrn: '',
+    last_name: '',
+    dob: '',
+    email: '',
+    password: ''
+  });
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registerMessage, setRegisterMessage] = useState<string | null>(null);
+  const [isRegistering, setRegistering] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -37,6 +48,39 @@ export const LoginPage = () => {
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setRegisterError(null);
+    setRegisterMessage(null);
+    setRegistering(true);
+
+    try {
+      const response = await apiRequest<{ access_token: string; expires_in: number; user: unknown }>('/auth/patient/register', {
+        method: 'POST',
+        body: {
+          mrn: registerForm.mrn.trim().toUpperCase(),
+          last_name: registerForm.last_name.trim(),
+          dob: registerForm.dob,
+          email: registerForm.email.trim().toLowerCase(),
+          password: registerForm.password
+        }
+      });
+      setRegisterMessage('Registration successful! Redirecting...');
+      // The auth context should handle the response automatically via cookies
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setRegisterError(err.detail ?? err.message);
+      } else {
+        setRegisterError('Registration failed. Please try again.');
+      }
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -73,14 +117,109 @@ export const LoginPage = () => {
             </>
           ) : (
             <>
-              <label>
-                <span>MRN or Email</span>
-                <input type="text" value={patientIdentifier} onChange={(event) => setPatientIdentifier(event.target.value)} placeholder="MRN-XXXX or email" required disabled={isSubmitting} />
-              </label>
-              <label>
-                <span>Password</span>
-                <input type="password" value={patientPassword} onChange={(event) => setPatientPassword(event.target.value)} placeholder="Enter password" required disabled={isSubmitting} />
-              </label>
+              {!showRegister ? (
+                <>
+                  <label>
+                    <span>MRN or Email</span>
+                    <input type="text" value={patientIdentifier} onChange={(event) => setPatientIdentifier(event.target.value)} placeholder="MRN-XXXX or email" required disabled={isSubmitting} />
+                  </label>
+                  <label>
+                    <span>Password</span>
+                    <input type="password" value={patientPassword} onChange={(event) => setPatientPassword(event.target.value)} placeholder="Enter password" required disabled={isSubmitting} />
+                  </label>
+                  <div style={{ marginTop: '0.5rem', textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => setShowRegister(true)}
+                      disabled={isSubmitting}
+                      style={{ fontSize: '0.85rem' }}
+                    >
+                      New patient? Register here
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Patient Registration</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    Verify your identity using your MRN, last name, and date of birth to create your account.
+                  </p>
+                  <form onSubmit={handleRegister}>
+                    <label>
+                      <span>MRN</span>
+                      <input
+                        type="text"
+                        value={registerForm.mrn}
+                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, mrn: e.target.value }))}
+                        placeholder="MRN-XXXX"
+                        required
+                        disabled={isRegistering}
+                      />
+                    </label>
+                    <label>
+                      <span>Last Name</span>
+                      <input
+                        type="text"
+                        value={registerForm.last_name}
+                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, last_name: e.target.value }))}
+                        required
+                        disabled={isRegistering}
+                      />
+                    </label>
+                    <label>
+                      <span>Date of Birth</span>
+                      <input
+                        type="date"
+                        value={registerForm.dob}
+                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, dob: e.target.value }))}
+                        required
+                        disabled={isRegistering}
+                      />
+                    </label>
+                    <label>
+                      <span>Email</span>
+                      <input
+                        type="email"
+                        value={registerForm.email}
+                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, email: e.target.value }))}
+                        required
+                        disabled={isRegistering}
+                      />
+                    </label>
+                    <label>
+                      <span>Password</span>
+                      <input
+                        type="password"
+                        value={registerForm.password}
+                        onChange={(e) => setRegisterForm((prev) => ({ ...prev, password: e.target.value }))}
+                        minLength={8}
+                        required
+                        disabled={isRegistering}
+                      />
+                    </label>
+                    {registerError ? <div className="auth-error">{registerError}</div> : null}
+                    {registerMessage ? <div style={{ color: 'var(--accent-strong)', fontSize: '0.9rem' }}>{registerMessage}</div> : null}
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                      <button type="submit" className="auth-submit" disabled={isRegistering} style={{ flex: 1 }}>
+                        {isRegistering ? 'Registering...' : 'Register'}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => {
+                          setShowRegister(false);
+                          setRegisterError(null);
+                          setRegisterMessage(null);
+                        }}
+                        disabled={isRegistering}
+                      >
+                        Back
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
             </>
           )}
 

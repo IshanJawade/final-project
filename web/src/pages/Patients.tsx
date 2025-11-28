@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
-import { PatientSummary } from '../types';
+import { CaseSummary, PatientSummary } from '../types';
 
 type PatientFormState = {
   first_name: string;
@@ -38,14 +38,20 @@ export const PatientsPage = () => {
   const [patientForm, setPatientForm] = useState<PatientFormState>(emptyPatientForm);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<PatientSummary | null>(null);
 
   const isPatient = user.role === 'PATIENT';
   const canCreate = user.role === 'ADMIN' || user.role === 'RECEPTIONIST';
 
   const searchParams = useMemo(() => {
     const params = new URLSearchParams({ limit: '50' });
-    if (submittedQuery.trim()) {
-      params.set('query', submittedQuery.trim());
+    const trimmed = submittedQuery.trim();
+    if (trimmed) {
+      if (/^p\d{2,}$/i.test(trimmed)) {
+        params.set('code', trimmed.toUpperCase());
+      } else {
+        params.set('query', trimmed);
+      }
     }
     return params.toString();
   }, [submittedQuery]);
@@ -74,7 +80,9 @@ export const PatientsPage = () => {
     },
     onSuccess: (response) => {
       setCreateError(null);
-      setCreateMessage(`Created MRN ${response.patient.mrn} for ${response.patient.first_name} ${response.patient.last_name}.`);
+      setCreateMessage(
+        `Created ${response.patient.patient_code} (MRN ${response.patient.mrn}) for ${response.patient.first_name} ${response.patient.last_name}.`
+      );
       setPatientForm(emptyPatientForm);
       queryClient.invalidateQueries({ predicate: (queryItem) => Array.isArray(queryItem.queryKey) && queryItem.queryKey[0] === 'patients' });
     },
@@ -87,6 +95,7 @@ export const PatientsPage = () => {
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
     setSubmittedQuery(query);
+    setSelectedPatient(null);
   };
 
   const handleCreate = (event: FormEvent<HTMLFormElement>) => {
@@ -94,6 +103,17 @@ export const PatientsPage = () => {
     setCreateMessage(null);
     createMutation.mutate(patientForm);
   };
+
+  const openCasesQuery = useQuery({
+    queryKey: ['patient-open-cases', selectedPatient?.id],
+    queryFn: () =>
+      authedRequest<{ data: CaseSummary[] }>(
+        `/cases?patient_id=${encodeURIComponent(selectedPatient!.id)}&status=OPEN&limit=25`
+      ),
+    enabled: Boolean(selectedPatient)
+  });
+
+  const openCases = openCasesQuery.data?.data ?? [];
 
   if (isPatient) {
     return (
@@ -170,12 +190,12 @@ export const PatientsPage = () => {
         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 240px', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
             <label htmlFor="patient-search" style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-              Search by MRN or name
+              Search by MRN, name, or patient code
             </label>
             <input
               id="patient-search"
               type="text"
-              placeholder="MRN-001 or Jane"
+              placeholder="P00001 or MRN-001 or Jane"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               style={{ borderRadius: '0.9rem', border: '1px solid var(--border-soft)', padding: '0.7rem 1rem' }}
@@ -191,6 +211,7 @@ export const PatientsPage = () => {
         <table>
           <thead>
             <tr>
+              <th>Code</th>
               <th>MRN</th>
               <th>Name</th>
               <th>Date of Birth</th>
@@ -217,18 +238,82 @@ export const PatientsPage = () => {
                 </td>
               </tr>
             ) : (
-              patients.map((patient) => (
-                <tr key={patient.id}>
-                  <td>{patient.mrn}</td>
-                  <td>{formatName(patient)}</td>
-                  <td>{patient.dob}</td>
-                  <td>{new Date(patient.updated_at).toLocaleString()}</td>
-                </tr>
-              ))
+              patients.map((patient) => {
+                const isSelected = selectedPatient?.id === patient.id;
+                return (
+                  <tr
+                    key={patient.id}
+                    onClick={() => setSelectedPatient(patient)}
+                    style={{
+                      cursor: 'pointer',
+                      backgroundColor: isSelected ? 'rgba(14,165,233,0.08)' : undefined
+                    }}
+                  >
+                    <td>{patient.patient_code}</td>
+                    <td>{patient.mrn}</td>
+                    <td>{formatName(patient)}</td>
+                    <td>{patient.dob}</td>
+                    <td>{new Date(patient.updated_at).toLocaleString()}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </article>
+
+      {selectedPatient ? (
+        <article className="panel" style={{ marginTop: '1.25rem' }}>
+          <header className="form-panel-header" style={{ marginBottom: '1rem' }}>
+            <div>
+              <h2 style={{ margin: 0 }}>Open cases for {selectedPatient.patient_code}</h2>
+              <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+                Front desk view of active cases linked to {formatName(selectedPatient)}.
+              </p>
+            </div>
+          </header>
+          {openCasesQuery.isLoading ? (
+            <p style={{ color: 'var(--text-muted)' }}>Loading cases…</p>
+          ) : openCasesQuery.isError ? (
+            <p className="feedback error">{describeError(openCasesQuery.error)}</p>
+          ) : openCases.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)' }}>No open cases for this patient.</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              {openCases.map((caseRecord) => (
+                <div
+                  key={caseRecord.id}
+                  className="panel"
+                  style={{ margin: 0, borderStyle: 'dashed', padding: '0.95rem 1.1rem' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong>{caseRecord.case_code}</strong>
+                    <span className="status-pill" style={{ fontSize: '0.7rem' }}>
+                      {caseRecord.status}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: '0.5rem', color: 'var(--text-muted)' }}>
+                    Assigned to{' '}
+                    {caseRecord.assigned_doctor
+                      ? `${caseRecord.assigned_doctor.first_name} ${caseRecord.assigned_doctor.last_name}`
+                      : 'Unassigned'}
+                  </div>
+                  {caseRecord.summary ? (
+                    <div style={{ marginTop: '0.5rem', color: 'var(--text-muted)' }}>{caseRecord.summary}</div>
+                  ) : null}
+                  <small style={{ display: 'block', marginTop: '0.5rem', color: 'var(--text-muted)' }}>
+                    Updated {new Date(caseRecord.updated_at).toLocaleString()}
+                  </small>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      ) : (
+        <article className="panel" style={{ marginTop: '1.25rem', color: 'var(--text-muted)' }}>
+          Select a patient above to review their active cases instantly.
+        </article>
+      )}
     </div>
   );
 };

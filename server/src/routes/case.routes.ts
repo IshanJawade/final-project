@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireRoles } from '../middleware/auth';
 import { validateBody, validateQuery } from '../middleware/validateResource';
@@ -13,6 +14,7 @@ import { ProblemDetails } from '../utils/problem';
 import { serializeCaseForRole } from '../serializers/case.serializer';
 import { authorizationService } from '../services/authorization.service';
 import { auditService } from '../services/audit.service';
+import { allocateCaseCode } from '../utils/friendlyIds';
 
 const router = Router();
 
@@ -29,24 +31,49 @@ const CASE_INCLUDE = {
   _count: { select: { visits: true } }
 } as const;
 
-const loadCaseOrThrow = async (caseId: string) => {
-  const record = await prisma.case.findUnique({ where: { id: caseId }, include: CASE_INCLUDE });
+type CaseWithRelations = Prisma.CaseGetPayload<{ include: typeof CASE_INCLUDE }>;
+
+const CASE_CODE_REGEX = /^c\d{5,}$/i;
+
+const normalizeCaseCode = (code: string) => code.trim().toUpperCase();
+
+const loadCaseOrThrow = async (identifier: string): Promise<CaseWithRelations> => {
+  const isCode = CASE_CODE_REGEX.test(identifier);
+  const where: Prisma.CaseWhereUniqueInput = isCode
+    ? { case_code: normalizeCaseCode(identifier) }
+    : { id: identifier };
+
+  const record = await prisma.case.findUnique({
+    where,
+    include: CASE_INCLUDE
+  });
   if (!record) {
     throw new ProblemDetails({ status: 404, title: 'Case not found' });
   }
   return record;
 };
 
-const buildCaseFilters = async (role: string, userId: string, filters: CaseListQueryInput) => {
+const buildCaseFilters = async (
+  role: string,
+  userId: string,
+  filters: CaseListQueryInput,
+  options: { patientIdOverride?: string; caseCode?: string } = {}
+) => {
   const where: Record<string, unknown> = {};
+
+  if (options.caseCode) {
+    where.case_code = normalizeCaseCode(options.caseCode);
+  }
 
   if (filters.status) {
     where.status = filters.status;
   }
 
+  const requestedPatientId = options.patientIdOverride ?? filters.patient_id;
+
   if (role === 'ADMIN') {
-    if (filters.patient_id) {
-      where.patientId = filters.patient_id;
+    if (requestedPatientId) {
+      where.patientId = requestedPatientId;
     }
     if (filters.doctor_id) {
       where.assignedDoctorId = filters.doctor_id;
@@ -57,17 +84,24 @@ const buildCaseFilters = async (role: string, userId: string, filters: CaseListQ
   if (role === 'DOCTOR') {
     const doctor = await authorizationService.requireDoctorProfile(userId);
     where.assignedDoctorId = doctor.id;
-    if (filters.patient_id) {
-      where.patientId = filters.patient_id;
+    if (requestedPatientId) {
+      where.patientId = requestedPatientId;
     }
     return where;
   }
 
   if (role === 'RECEPTIONIST') {
-    if (!filters.patient_id) {
+    if (options.caseCode) {
+      if (requestedPatientId) {
+        where.patientId = requestedPatientId;
+      }
+      return where;
+    }
+
+    if (!requestedPatientId) {
       throw new ProblemDetails({ status: 400, title: 'patient_id is required for receptionist searches' });
     }
-    where.patientId = filters.patient_id;
+    where.patientId = requestedPatientId;
     return where;
   }
 
@@ -87,7 +121,18 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const filters = req.query as unknown as CaseListQueryInput;
-      const where = await buildCaseFilters(req.user!.role, req.user!.id, filters);
+      const caseCode = filters.case_code ? normalizeCaseCode(filters.case_code) : undefined;
+
+      let patientIdOverride: string | undefined;
+      if (filters.patient_code) {
+        const patient = await prisma.patientProfile.findUnique({ where: { patient_code: filters.patient_code.toUpperCase() } });
+        if (!patient) {
+          return res.json({ data: [] });
+        }
+        patientIdOverride = patient.id;
+      }
+
+      const where = await buildCaseFilters(req.user!.role, req.user!.id, filters, { patientIdOverride, caseCode });
 
       const cases = await prisma.case.findMany({
         where,
@@ -136,15 +181,19 @@ router.post(
         }
       }
 
-      const created = await prisma.case.create({
-        data: {
-          patientId: patient.id,
-          assignedDoctorId: doctor.id,
-          summary: summary ?? null,
-          symptoms_text: symptoms_text ?? null,
-          created_by_user_id: req.user!.id
-        },
-        include: CASE_INCLUDE
+      const created = await prisma.$transaction(async (tx) => {
+        const case_code = await allocateCaseCode(tx);
+        return tx.case.create({
+          data: {
+            case_code,
+            patientId: patient.id,
+            assignedDoctorId: doctor.id,
+            summary: summary ?? null,
+            symptoms_text: symptoms_text ?? null,
+            created_by_user_id: req.user!.id
+          },
+          include: CASE_INCLUDE
+        });
       });
 
       await auditService.record({

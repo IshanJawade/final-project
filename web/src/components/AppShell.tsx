@@ -18,7 +18,8 @@ const navItems: NavItem[] = [
   { to: '/appointments', label: 'Appointments', icon: CalendarCheck2 },
   { to: '/doctors', label: 'Doctors', icon: Stethoscope, roles: ['ADMIN', 'DOCTOR', 'RECEPTIONIST'] },
   { to: '/compliance', label: 'Compliance', icon: ShieldCheck, roles: ['ADMIN'] },
-  { to: '/admin/staff', label: 'Staff Admin', icon: UserPlus, roles: ['ADMIN'] }
+  { to: '/admin/staff', label: 'Staff Admin', icon: UserPlus, roles: ['ADMIN'] },
+  { to: '/admin/audit', label: 'Audit Log', icon: ShieldCheck, roles: ['ADMIN'] }
 ];
 
 type AppShellProps = {

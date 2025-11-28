@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireRoles } from '../middleware/auth';
-import { validateBody } from '../middleware/validateResource';
-import { CreateStaffSchema, CreateStaffInput } from '../schemas/admin.schema';
+import { validateBody, validateQuery } from '../middleware/validateResource';
+import { CreateStaffSchema, CreateStaffInput, AuditLogQuerySchema, AuditLogQueryInput } from '../schemas/admin.schema';
 import { ProblemDetails } from '../utils/problem';
 import { hashPassword } from '../utils/password';
 import { auditService } from '../services/audit.service';
@@ -124,6 +124,127 @@ router.post('/staff', validateBody(CreateStaffSchema), async (req: Request, res:
     });
 
     res.status(201).json({ staff: sanitized });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/dashboard-metrics', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [patientsTotal, doctorsTotal, receptionistsTotal, openCasesTotal, appointmentsToday] = await Promise.all([
+      prisma.patientProfile.count(),
+      prisma.user.count({ where: { role: 'DOCTOR' } }),
+      prisma.user.count({ where: { role: 'RECEPTIONIST' } }),
+      prisma.case.count({ where: { status: 'OPEN' } }),
+      prisma.appointment.count({
+        where: {
+          start_time: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            lt: new Date(new Date().setHours(23, 59, 59, 999))
+          }
+        }
+      })
+    ]);
+
+    res.json({
+      patients_total: patientsTotal,
+      doctors_total: doctorsTotal,
+      receptionists_total: receptionistsTotal,
+      open_cases_total: openCasesTotal,
+      appointments_today: appointmentsToday
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/audit', validateQuery(AuditLogQuerySchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const filters = req.query as unknown as AuditLogQueryInput;
+    const where: Record<string, unknown> = {};
+
+    if (filters.actor) {
+      where.actor_user_id = filters.actor;
+    }
+    if (filters.resource_type) {
+      where.resource_type = filters.resource_type;
+    }
+    if (filters.from || filters.to) {
+      const range: Record<string, Date> = {};
+      if (filters.from) {
+        range.gte = new Date(filters.from);
+      }
+      if (filters.to) {
+        range.lte = new Date(filters.to);
+      }
+      where.timestamp = range;
+    }
+
+    const logs = await prisma.auditLog.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take: filters.limit
+    });
+
+    const actorIds = logs.map((log) => log.actor_user_id).filter((id): id is string => Boolean(id));
+    const actors = await prisma.user.findMany({
+      where: { id: { in: actorIds } },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true
+      }
+    });
+
+    const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
+
+    res.json({
+      data: logs.map((log) => ({
+        id: log.id,
+        timestamp: log.timestamp.toISOString(),
+        actor: log.actor_user_id && actorMap.has(log.actor_user_id)
+          ? {
+              id: actorMap.get(log.actor_user_id)!.id,
+              email: actorMap.get(log.actor_user_id)!.email,
+              first_name: actorMap.get(log.actor_user_id)!.first_name,
+              last_name: actorMap.get(log.actor_user_id)!.last_name,
+              role: actorMap.get(log.actor_user_id)!.role
+            }
+          : null,
+        action: log.action,
+        resource_type: log.resource_type,
+        resource_id: log.resource_id,
+        before_json: log.before_json,
+        after_json: log.after_json,
+        ip: log.ip,
+        user_agent: log.user_agent,
+        request_id: log.request_id,
+        outcome: log.outcome
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/bulk', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dryRun = req.query.dry_run === 'true';
+    // TODO: Implement bulk import logic
+    // For now, return a placeholder response
+    res.json({
+      dry_run: dryRun,
+      message: 'Bulk import endpoint is not yet implemented',
+      report: {
+        patients: { created: 0, errors: [] },
+        doctors: { created: 0, errors: [] },
+        receptionists: { created: 0, errors: [] },
+        specializations: { created: 0, errors: [] },
+        availability_slots: { created: 0, errors: [] }
+      }
+    });
   } catch (err) {
     next(err);
   }

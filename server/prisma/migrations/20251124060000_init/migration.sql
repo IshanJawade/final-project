@@ -46,6 +46,7 @@ CREATE TABLE "DoctorProfile" (
 -- CreateTable
 CREATE TABLE "PatientProfile" (
     "id" TEXT NOT NULL,
+    "patient_code" TEXT NOT NULL,
     "userId" TEXT,
     "mrn" TEXT NOT NULL,
     "first_name" TEXT NOT NULL,
@@ -64,6 +65,7 @@ CREATE TABLE "PatientProfile" (
 -- CreateTable
 CREATE TABLE "Case" (
     "id" TEXT NOT NULL,
+    "case_code" TEXT NOT NULL,
     "patientId" TEXT NOT NULL,
     "assignedDoctorId" TEXT NOT NULL,
     "status" "CaseStatus" NOT NULL DEFAULT 'OPEN',
@@ -204,7 +206,13 @@ CREATE UNIQUE INDEX "DoctorProfile_userId_key" ON "DoctorProfile"("userId");
 CREATE UNIQUE INDEX "PatientProfile_userId_key" ON "PatientProfile"("userId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "PatientProfile_patient_code_key" ON "PatientProfile"("patient_code");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "PatientProfile_mrn_key" ON "PatientProfile"("mrn");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Case_case_code_key" ON "Case"("case_code");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Prescription_visitId_key" ON "Prescription"("visitId");

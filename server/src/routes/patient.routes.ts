@@ -8,6 +8,7 @@ import { generateMrn } from '../utils/mrn';
 import { ProblemDetails } from '../utils/problem';
 import { authorizationService } from '../services/authorization.service';
 import { auditService } from '../services/audit.service';
+import { allocatePatientCode } from '../utils/friendlyIds';
 
 const router = Router();
 
@@ -22,10 +23,13 @@ router.get(
       const filters = req.query as unknown as PatientSearchQueryInput;
       const where: any = {};
       if (filters.query) {
+        const term = filters.query.trim();
+        const upper = term.toUpperCase();
         where.OR = [
-          { first_name: { contains: filters.query, mode: 'insensitive' } },
-          { last_name: { contains: filters.query, mode: 'insensitive' } },
-          { mrn: { contains: filters.query.toUpperCase() } }
+          { first_name: { contains: term, mode: 'insensitive' } },
+          { last_name: { contains: term, mode: 'insensitive' } },
+          { mrn: { contains: upper } },
+          { patient_code: { equals: upper } }
         ];
       }
       if (filters.dob) {
@@ -33,6 +37,9 @@ router.get(
       }
       if (filters.mrn) {
         where.mrn = filters.mrn.toUpperCase();
+      }
+      if (filters.code) {
+        where.patient_code = filters.code.toUpperCase();
       }
 
       if (req.user?.role === 'DOCTOR') {
@@ -63,14 +70,18 @@ router.post(
     try {
       const mrn = generateMrn();
       const dobDate = new Date(req.body.dob);
-      const patient = await prisma.patientProfile.create({
-        data: {
-          mrn,
-          first_name: req.body.first_name,
-          last_name: req.body.last_name,
-          phone: req.body.phone ?? null,
-          dob: dobDate
-        }
+      const patient = await prisma.$transaction(async (tx) => {
+        const patient_code = await allocatePatientCode(tx);
+        return tx.patientProfile.create({
+          data: {
+            patient_code,
+            mrn,
+            first_name: req.body.first_name,
+            last_name: req.body.last_name,
+            phone: req.body.phone ?? null,
+            dob: dobDate
+          }
+        });
       });
 
       await auditService.record({

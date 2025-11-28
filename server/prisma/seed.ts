@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../src/utils/password';
+import { allocateCaseCode, allocatePatientCode } from '../src/utils/friendlyIds';
 
 const prisma = new PrismaClient();
 
@@ -116,6 +117,7 @@ async function seedUsers(specializationMap: Map<string, string>) {
     }
   });
 
+  const nextPatientCode = await allocatePatientCode(prisma);
   const patientProfile = await prisma.patientProfile.upsert({
     where: { mrn: 'MRN-1001' },
     update: {
@@ -125,6 +127,7 @@ async function seedUsers(specializationMap: Map<string, string>) {
       dob: new Date('1990-01-15')
     },
     create: {
+      patient_code: nextPatientCode,
       mrn: 'MRN-1001',
       first_name: 'Jane',
       last_name: 'Doe',
@@ -185,11 +188,13 @@ async function seedUsers(specializationMap: Map<string, string>) {
     });
   }
 
+  const nextCaseCode = await allocateCaseCode(prisma);
   const caseRecord = await prisma.case.upsert({
     where: { id: '11111111-1111-1111-1111-111111111111' },
     update: {},
     create: {
       id: '11111111-1111-1111-1111-111111111111',
+      case_code: nextCaseCode,
       patientId: patientProfile.id,
       assignedDoctorId: doctorProfile.id,
       status: 'OPEN',

@@ -15,6 +15,7 @@ type DoctorSummary = {
 type PatientSummary = {
   id: string;
   mrn: string;
+  patient_code: string;
   first_name: string;
   last_name: string;
   userId: string | null;
@@ -34,6 +35,7 @@ export type AppointmentWithRelations = {
   patient: PatientSummary;
   case: {
     id: string;
+    case_code: string;
     status: 'OPEN' | 'CLOSED';
   };
 };
@@ -62,6 +64,7 @@ export const serializeAppointmentForRole = (record: AppointmentWithRelations, ro
   const payload: Record<string, unknown> = {
     id: record.id,
     case_id: record.caseId,
+    case_code: record.case.case_code,
     start_time: record.start_time,
     end_time: record.end_time,
     status: record.status,
@@ -74,6 +77,7 @@ export const serializeAppointmentForRole = (record: AppointmentWithRelations, ro
   if (shouldShowPatient(record, role, currentUserId)) {
     payload.patient = {
       id: record.patient.id,
+      patient_code: record.patient.patient_code,
       mrn: record.patient.mrn,
       first_name: record.patient.first_name,
       last_name: record.patient.last_name

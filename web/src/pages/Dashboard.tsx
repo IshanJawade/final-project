@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
-import { AppointmentSummary, CaseSummary } from '../types';
+import { AppointmentSummary, CaseSummary, DashboardMetrics } from '../types';
 
 type TimelineItem = {
   id: string;
@@ -32,7 +32,14 @@ const startAndEndOfToday = () => {
 
 export const Dashboard = () => {
   const { authedRequest, user } = useAuth();
+  const isAdmin = user.role === 'ADMIN';
   const canLoadCases = user.role !== 'RECEPTIONIST';
+
+  const metricsQuery = useQuery({
+    queryKey: ['dashboard-metrics'],
+    queryFn: () => authedRequest<DashboardMetrics>('/admin/dashboard-metrics'),
+    enabled: isAdmin
+  });
 
   const casesQuery = useQuery({
     queryKey: ['dashboard-cases', user.role],
@@ -55,10 +62,11 @@ export const Dashboard = () => {
     queryFn: () => authedRequest<{ data: AppointmentSummary[] }>(`/appointments?${appointmentParams}`)
   });
 
+  const metrics = metricsQuery.data;
   const cases = casesQuery.data?.data ?? [];
   const appointments = appointmentsQuery.data?.data ?? [];
 
-  const openCaseCount = cases.filter((item) => item.status === 'OPEN').length;
+  const openCaseCount = isAdmin && metrics ? metrics.open_cases_total : cases.filter((item) => item.status === 'OPEN').length;
   const todaysCompleted = appointments.filter((appt) => appt.status === 'COMPLETED').length;
 
   const upcomingTimeline: TimelineItem[] = appointments
@@ -78,23 +86,38 @@ export const Dashboard = () => {
     {
       title: 'Open Cases',
       value: canLoadCases ? openCaseCount.toString() : '—',
-      trend: canLoadCases ? `${cases.length} total tracked` : 'Requires patient context'
+      trend: canLoadCases ? (isAdmin && metrics ? `${metrics.open_cases_total} total` : `${cases.length} total tracked`) : 'Requires patient context'
     },
     {
       title: 'Appointments Today',
-      value: appointments.length.toString(),
+      value: (isAdmin && metrics ? metrics.appointments_today : appointments.length).toString(),
       trend: `${todaysCompleted} completed`
     },
-    {
-      title: 'Upcoming Window',
-      value: upcomingTimeline.length.toString(),
-      trend: 'Next scheduled visits'
-    },
-    {
-      title: 'Compliance Score',
-      value: '99.2%',
-      trend: 'Audit ready'
-    }
+    ...(isAdmin && metrics
+      ? [
+          {
+            title: 'Patients',
+            value: metrics.patients_total.toString(),
+            trend: 'Total registered'
+          },
+          {
+            title: 'Staff',
+            value: (metrics.doctors_total + metrics.receptionists_total).toString(),
+            trend: `${metrics.doctors_total} doctors, ${metrics.receptionists_total} receptionists`
+          }
+        ]
+      : [
+          {
+            title: 'Upcoming Window',
+            value: upcomingTimeline.length.toString(),
+            trend: 'Next scheduled visits'
+          },
+          {
+            title: 'Compliance Score',
+            value: '99.2%',
+            trend: 'Audit ready'
+          }
+        ])
   ];
 
   return (

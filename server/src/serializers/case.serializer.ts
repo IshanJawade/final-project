@@ -2,6 +2,7 @@ type Role = 'ADMIN' | 'DOCTOR' | 'RECEPTIONIST' | 'PATIENT';
 
 type PatientProjection = {
   id: string;
+  patient_code: string;
   mrn: string;
   first_name: string;
   last_name: string;
@@ -22,6 +23,7 @@ type DoctorProjection = {
 
 export type CaseWithRelations = {
   id: string;
+  case_code: string;
   status: 'OPEN' | 'CLOSED';
   summary: string | null;
   symptoms_text: string | null;
@@ -50,6 +52,7 @@ export const serializeCaseForRole = (record: CaseWithRelations, role: Role, curr
   const patient = record.patient
     ? {
         id: record.patient.id,
+        patient_code: record.patient.patient_code,
         mrn: record.patient.mrn,
         first_name: record.patient.first_name,
         last_name: record.patient.last_name
@@ -68,6 +71,7 @@ export const serializeCaseForRole = (record: CaseWithRelations, role: Role, curr
 
   const base = {
     id: record.id,
+    case_code: record.case_code,
     status: record.status,
     summary: record.summary,
     patient,

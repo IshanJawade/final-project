@@ -5,7 +5,9 @@ const uuid = () => z.string().uuid();
 export const CaseListQuerySchema = z.object({
   status: z.enum(['OPEN', 'CLOSED']).optional(),
   patient_id: uuid().optional(),
+  patient_code: z.string().min(2).optional(),
   doctor_id: uuid().optional(),
+  case_code: z.string().min(2).optional(),
   limit: z.coerce.number().min(1).max(100).default(25)
 });
 

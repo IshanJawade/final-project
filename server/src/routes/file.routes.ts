@@ -182,6 +182,50 @@ router.post(
   }
 );
 
+router.get('/cases/:caseId/files', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const caseRecord = await prisma.case.findUnique({
+      where: { id: req.params.caseId },
+      include: {
+        patient: true,
+        assignedDoctor: true
+      }
+    });
+
+    if (!caseRecord) {
+      throw new ProblemDetails({ status: 404, title: 'Case not found' });
+    }
+
+    const role = req.user?.role;
+    if (!role) {
+      throw new ProblemDetails({ status: 401, title: 'Not authenticated' });
+    }
+
+    if (role === 'DOCTOR') {
+      const doctor = await authorizationService.requireDoctorProfile(req.user!.id);
+      if (caseRecord.assignedDoctorId !== doctor.id) {
+        throw new ProblemDetails({ status: 403, title: 'Doctor cannot access this case' });
+      }
+    } else if (role === 'PATIENT') {
+      const patient = await authorizationService.requirePatientProfile(req.user!.id);
+      if (caseRecord.patientId !== patient.id) {
+        throw new ProblemDetails({ status: 403, title: 'Patient cannot access this case' });
+      }
+    }
+
+    const files = await prisma.file.findMany({
+      where: { caseId: caseRecord.id },
+      orderBy: { created_at: 'desc' }
+    });
+
+    res.json({
+      data: files.map((file) => serializeFile(file))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/files/:id/meta', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const fileRecord = await prisma.file.findUnique({

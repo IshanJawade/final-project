@@ -2,6 +2,7 @@ type Role = 'ADMIN' | 'DOCTOR' | 'RECEPTIONIST' | 'PATIENT';
 
 type PatientRecord = {
   id: string;
+  patient_code: string;
   mrn: string;
   first_name: string;
   last_name: string;
@@ -18,6 +19,7 @@ type PatientRecord = {
 export const serializePatientForRole = (patient: PatientRecord, role: Role, currentUserId?: string) => {
   const base = {
     id: patient.id,
+    patient_code: patient.patient_code,
     mrn: patient.mrn,
     first_name: patient.first_name,
     last_name: patient.last_name,

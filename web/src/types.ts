@@ -45,6 +45,7 @@ export type DoctorSummary = {
 
 export type PatientSummary = {
   id: string;
+  patient_code: string;
   mrn: string;
   first_name: string;
   last_name: string;
@@ -59,10 +60,12 @@ export type PatientSummary = {
 
 export type CaseSummary = {
   id: string;
+  case_code: string;
   status: 'OPEN' | 'CLOSED';
   summary: string | null;
   patient: {
     id: string;
+    patient_code: string;
     mrn: string;
     first_name: string;
     last_name: string;
@@ -84,6 +87,7 @@ export type CaseSummary = {
 export type AppointmentSummary = {
   id: string;
   case_id: string;
+  case_code: string;
   start_time: string;
   end_time: string;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
@@ -96,6 +100,7 @@ export type AppointmentSummary = {
   };
   patient?: {
     id: string;
+    patient_code: string;
     mrn: string;
     first_name: string;
     last_name: string;
@@ -110,4 +115,73 @@ export type AvailabilitySlot = {
   start_time: string;
   end_time: string;
   is_booked: boolean;
+};
+
+export type VisitSummary = {
+  id: string;
+  caseId: string;
+  visit_number: number;
+  visit_datetime: string;
+  vitals: Record<string, unknown>;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  prescription: PrescriptionSummary | null;
+};
+
+export type PrescriptionSummary = {
+  id: string;
+  visitId: string;
+  medication_name: string;
+  dosage: string;
+  frequency: string;
+  route: string;
+  duration: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FileSummary = {
+  id: string;
+  caseId: string;
+  visitId: string | null;
+  filename: string;
+  mimetype: string;
+  size_bytes: number;
+  created_at: string;
+};
+
+export type CaseDetail = CaseSummary & {
+  visits?: VisitSummary[];
+  files?: FileSummary[];
+};
+
+export type DashboardMetrics = {
+  patients_total: number;
+  doctors_total: number;
+  receptionists_total: number;
+  open_cases_total: number;
+  appointments_today: number;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  timestamp: string;
+  actor: {
+    id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+    role: Role;
+  } | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  before_json: unknown;
+  after_json: unknown;
+  ip: string | null;
+  user_agent: string | null;
+  request_id: string | null;
+  outcome: 'SUCCESS' | 'DENY' | 'ERROR';
 };

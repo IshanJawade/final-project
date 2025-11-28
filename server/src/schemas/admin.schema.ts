@@ -28,3 +28,13 @@ export const CreateStaffSchema = z
   });
 
 export type CreateStaffInput = z.infer<typeof CreateStaffSchema>;
+
+export const AuditLogQuerySchema = z.object({
+  actor: z.string().uuid().optional(),
+  resource_type: z.string().optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  limit: z.coerce.number().int().positive().max(1000).default(100)
+});
+
+export type AuditLogQueryInput = z.infer<typeof AuditLogQuerySchema>;
