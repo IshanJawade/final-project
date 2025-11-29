@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { apiRequest } from '../api.js';
+import { apiRequest, API_BASE } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function UserDashboard() {
@@ -14,20 +14,24 @@ export default function UserDashboard() {
   const [passwordError, setPasswordError] = useState('');
 
   const [records, setRecords] = useState([]);
-  const [recordForm, setRecordForm] = useState({ summary: '', notes: '', medicalProfessionalId: '' });
-  const [recordMessage, setRecordMessage] = useState('');
   const [recordError, setRecordError] = useState('');
+  const [downloadError, setDownloadError] = useState('');
   const [selectedRecord, setSelectedRecord] = useState(null);
 
   const [accessList, setAccessList] = useState([]);
-  const [accessForm, setAccessForm] = useState({ professionalId: '' });
   const [accessMessage, setAccessMessage] = useState('');
   const [accessError, setAccessError] = useState('');
+
+  const [requests, setRequests] = useState([]);
+  const [requestError, setRequestError] = useState('');
+  const [requestMessage, setRequestMessage] = useState('');
+  const [requestExpiry, setRequestExpiry] = useState({});
 
   useEffect(() => {
     loadProfile();
     loadRecords();
     loadAccess();
+    loadRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -50,6 +54,7 @@ export default function UserDashboard() {
     try {
       const payload = await apiRequest('/api/records', { token });
       setRecords(payload.records || []);
+      setRecordError('');
     } catch (err) {
       setRecordError(err.message);
     }
@@ -59,8 +64,19 @@ export default function UserDashboard() {
     try {
       const payload = await apiRequest('/api/user/access', { token });
       setAccessList(payload.professionals || []);
+      setAccessError('');
     } catch (err) {
       setAccessError(err.message);
+    }
+  }
+
+  async function loadRequests() {
+    try {
+      const payload = await apiRequest('/api/user/access/requests', { token });
+      setRequests(payload.requests || []);
+      setRequestError('');
+    } catch (err) {
+      setRequestError(err.message);
     }
   }
 
@@ -98,47 +114,29 @@ export default function UserDashboard() {
     }
   };
 
-  const handleRecordSubmit = async (evt) => {
-    evt.preventDefault();
-    setRecordMessage('');
-    setRecordError('');
+  const handleDownload = async (recordId) => {
+    setDownloadError('');
     try {
-      const payload = await apiRequest('/api/records', {
-        method: 'POST',
-        token,
-        body: {
-          data: {
-            summary: recordForm.summary,
-            notes: recordForm.notes,
-          },
-          medical_professional_id: recordForm.medicalProfessionalId
-            ? Number(recordForm.medicalProfessionalId)
-            : null,
+      const response = await fetch(`${API_BASE}/api/records/${recordId}/download`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
       });
-      setRecordMessage('Record saved.');
-      setRecordForm({ summary: '', notes: '', medicalProfessionalId: '' });
-      setRecords((prev) => [payload.record, ...prev]);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message || 'Download failed');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `record-${recordId}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (err) {
-      setRecordError(err.message);
-    }
-  };
-
-  const handleGrantAccess = async (evt) => {
-    evt.preventDefault();
-    setAccessMessage('');
-    setAccessError('');
-    try {
-      await apiRequest('/api/user/access/grant', {
-        method: 'POST',
-        token,
-        body: { medical_professional_id: Number(accessForm.professionalId) },
-      });
-      setAccessMessage('Access granted.');
-      setAccessForm({ professionalId: '' });
-      loadAccess();
-    } catch (err) {
-      setAccessError(err.message);
+      setDownloadError(err.message);
     }
   };
 
@@ -158,9 +156,34 @@ export default function UserDashboard() {
     }
   };
 
+  const handleRequestDecision = async (requestId, decision) => {
+    setRequestMessage('');
+    setRequestError('');
+    try {
+      await apiRequest(`/api/user/access/requests/${requestId}/respond`, {
+        method: 'POST',
+        token,
+        body: {
+          decision,
+          expires_at: requestExpiry[requestId] || null,
+        },
+      });
+      setRequestMessage(decision === 'approve' ? 'Access granted.' : 'Request declined.');
+      setRequestExpiry((prev) => {
+        const next = { ...prev };
+        delete next[requestId];
+        return next;
+      });
+      await Promise.all([loadRequests(), loadAccess()]);
+    } catch (err) {
+      setRequestError(err.message);
+    }
+  };
+
   return (
     <div className="panel">
       <h2>User Dashboard</h2>
+
       {profile && (
         <div className="panel">
           <h3>Profile</h3>
@@ -251,46 +274,9 @@ export default function UserDashboard() {
       </div>
 
       <div className="panel">
-        <h3>Create Record</h3>
-        {recordError && <div className="alert alert-error">{recordError}</div>}
-        {recordMessage && <div className="alert alert-success">{recordMessage}</div>}
-        <form className="form-grid" onSubmit={handleRecordSubmit}>
-          <label>
-            Summary
-            <input
-              value={recordForm.summary}
-              onChange={(evt) =>
-                setRecordForm((prev) => ({ ...prev, summary: evt.target.value }))
-              }
-              required
-            />
-          </label>
-          <label>
-            Notes
-            <textarea
-              rows="3"
-              value={recordForm.notes}
-              onChange={(evt) =>
-                setRecordForm((prev) => ({ ...prev, notes: evt.target.value }))
-              }
-              required
-            />
-          </label>
-          <label>
-            Medical Professional ID (optional)
-            <input
-              value={recordForm.medicalProfessionalId}
-              onChange={(evt) =>
-                setRecordForm((prev) => ({ ...prev, medicalProfessionalId: evt.target.value }))
-              }
-            />
-          </label>
-          <button type="submit">Save Record</button>
-        </form>
-      </div>
-
-      <div className="panel">
         <h3>My Records</h3>
+        {recordError && <div className="alert alert-error">{recordError}</div>}
+        {downloadError && <div className="alert alert-error">{downloadError}</div>}
         {records.length === 0 && <p>No records yet.</p>}
         {records.map((rec) => (
           <div key={rec.id} style={{ marginBottom: '12px', borderBottom: '1px solid #ccc', paddingBottom: '8px' }}>
@@ -298,9 +284,14 @@ export default function UserDashboard() {
               <strong>Record #{rec.id}</strong> • {new Date(rec.created_at).toLocaleString()}
             </div>
             <div>Summary: {rec.data.summary || '(no summary)'}</div>
-            <button type="button" onClick={() => setSelectedRecord(rec)}>
-              View Details
-            </button>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <button type="button" onClick={() => setSelectedRecord(rec)}>
+                View Details
+              </button>
+              <button type="button" onClick={() => handleDownload(rec.id)}>
+                Download JSON
+              </button>
+            </div>
           </div>
         ))}
         {selectedRecord && (
@@ -317,43 +308,85 @@ export default function UserDashboard() {
       </div>
 
       <div className="panel">
-        <h3>Manage Access</h3>
+        <h3>Pending Access Requests</h3>
+        {requestError && <div className="alert alert-error">{requestError}</div>}
+        {requestMessage && <div className="alert alert-success">{requestMessage}</div>}
+        {requests.length === 0 && <p>No pending requests.</p>}
+        {requests.length > 0 && (
+          <table className="table-like">
+            <thead>
+              <tr>
+                <th>Professional</th>
+                <th>Company</th>
+                <th>Message</th>
+                <th>Requested</th>
+                <th>Access Expires</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((req) => (
+                <tr key={req.id}>
+                  <td>{req.name}</td>
+                  <td>{req.company}</td>
+                  <td>{req.requested_message || '—'}</td>
+                  <td>{new Date(req.created_at).toLocaleString()}</td>
+                  <td>
+                    <input
+                      type="date"
+                      value={requestExpiry[req.id] || ''}
+                      onChange={(evt) =>
+                        setRequestExpiry((prev) => ({ ...prev, [req.id]: evt.target.value }))
+                      }
+                    />
+                  </td>
+                  <td style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" onClick={() => handleRequestDecision(req.id, 'approve')}>
+                      Approve
+                    </button>
+                    <button type="button" onClick={() => handleRequestDecision(req.id, 'decline')}>
+                      Decline
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Active Access</h3>
         {accessError && <div className="alert alert-error">{accessError}</div>}
         {accessMessage && <div className="alert alert-success">{accessMessage}</div>}
-        <form className="form-grid" onSubmit={handleGrantAccess}>
-          <label>
-            Medical Professional ID
-            <input
-              value={accessForm.professionalId}
-              onChange={(evt) =>
-                setAccessForm({ professionalId: evt.target.value })
-              }
-              required
-            />
-          </label>
-          <button type="submit">Grant Access</button>
-        </form>
-        <h4>Active Access</h4>
         {accessList.length === 0 && <p>No professionals currently have access.</p>}
         {accessList.length > 0 && (
           <table className="table-like">
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Company</th>
                 <th>Email</th>
-                <th>Since</th>
-                <th>Action</th>
+                <th>Access Since</th>
+                <th>Expires</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {accessList.map((entry) => (
                 <tr key={entry.id}>
                   <td>{entry.name}</td>
+                  <td>{entry.company || '—'}</td>
                   <td>{entry.email}</td>
                   <td>{new Date(entry.access_granted_at).toLocaleString()}</td>
                   <td>
+                    {entry.access_expires_at
+                      ? new Date(entry.access_expires_at).toLocaleString()
+                      : 'No expiry'}
+                  </td>
+                  <td>
                     <button type="button" onClick={() => handleRevoke(entry.medical_professional_id)}>
-                      Revoke
+                      Revoke Access
                     </button>
                   </td>
                 </tr>

@@ -30,7 +30,7 @@ const users = [
     email: 'alice.patient@example.com',
     mobile: '555-2001',
     address: '100 Main Street',
-    password: 'PatientPass123!',
+    password: 'NewPassword',
   },
   {
     name: 'Bob Patient',
@@ -167,13 +167,15 @@ async function seedAccessAndRecords(userIds, professionalIds) {
   const [professionalId] = professionalIds;
 
   const accessActive = await query(
-    `SELECT id FROM access WHERE user_id = $1 AND medical_professional_id = $2 AND access_revoked_at IS NULL`,
+    `SELECT id FROM access
+     WHERE user_id = $1 AND medical_professional_id = $2 AND access_revoked_at IS NULL
+       AND (access_expires_at IS NULL OR access_expires_at > NOW())`,
     [userId, professionalId]
   );
   if (accessActive.rowCount === 0) {
     await query(
-      `INSERT INTO access (user_id, medical_professional_id, access_granted_at, access_revoked_at)
-       VALUES ($1, $2, NOW(), NULL)`,
+      `INSERT INTO access (user_id, medical_professional_id, access_granted_at, access_expires_at, access_revoked_at)
+       VALUES ($1, $2, NOW(), NOW() + INTERVAL '90 days', NULL)`,
       [userId, professionalId]
     );
   }
@@ -195,6 +197,8 @@ async function seedAccessAndRecords(userIds, professionalIds) {
 
 async function run() {
   try {
+    await query('DELETE FROM access_requests');
+
     for (const admin of admins) {
       await upsertAdmin(admin);
     }
@@ -212,6 +216,28 @@ async function run() {
     }
 
     await seedAccessAndRecords(userIds, professionalIds);
+
+    if (userIds[1] && professionalIds[1]) {
+      const pending = await query(
+        `SELECT id FROM access_requests
+         WHERE user_id = $1 AND medical_professional_id = $2 AND status = 'pending'`,
+        [userIds[1], professionalIds[1]]
+      );
+      if (pending.rowCount === 0) {
+        await query(
+          `INSERT INTO access_requests (user_id, medical_professional_id, requested_message)
+           VALUES ($1, $2, $3)`,
+          [userIds[1], professionalIds[1], 'Requesting access to review recent test results.']
+        );
+      } else {
+        await query(
+          `UPDATE access_requests
+           SET requested_message = $2, updated_at = NOW()
+           WHERE id = $1`,
+          [pending.rows[0].id, 'Requesting access to review recent test results.']
+        );
+      }
+    }
 
     console.log('Seed data ready. Admin accounts:', admins.map((a) => a.username).join(', '));
   } catch (err) {

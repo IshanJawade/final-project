@@ -57,8 +57,9 @@ Open the address Vite prints (default `http://localhost:5173`).
 
 1. Register a new patient or medical professional
 2. Sign in as `admin1` and approve pending accounts
-3. Sign in as the new user and create records, grant access
-4. Sign in as an approved medical professional to view shared records
+3. Sign in as an approved medical professional, search for a patient, and submit an access request
+4. Sign in as the patient, approve or decline pending requests (optionally set an expiry), and download records
+5. With access granted, sign in as the medical professional to add a new record and confirm it appears in the patient portal
 
 ## Security Notes
 
@@ -72,9 +73,9 @@ Open the address Vite prints (default `http://localhost:5173`).
 Manual happy-path tests:
 
 - [ ] User registration → admin approval → login
-- [ ] Record creation and retrieval (patient)
-- [ ] Access grant/revoke (patient)
-- [ ] Record visibility (medical professional)
+- [ ] Professional search → access request → patient approval/decline
+- [ ] Record creation by medical professional → patient visibility/download
+- [ ] Patient revoke removes professional access
 - [ ] Admin approval for users and professionals
 
 Extend with automated tests as the system evolves.

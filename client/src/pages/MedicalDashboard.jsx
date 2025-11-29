@@ -14,13 +14,28 @@ export default function MedicalDashboard() {
   const [passwordError, setPasswordError] = useState('');
 
   const [patients, setPatients] = useState([]);
+  const [patientError, setPatientError] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [patientRecords, setPatientRecords] = useState([]);
-  const [patientError, setPatientError] = useState('');
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchError, setSearchError] = useState('');
+  const [requestNote, setRequestNote] = useState('');
+  const [requestStatus, setRequestStatus] = useState('');
+  const [requestErrorMsg, setRequestErrorMsg] = useState('');
+
+  const [requests, setRequests] = useState([]);
+  const [requestsError, setRequestsError] = useState('');
+
+  const [newRecordForm, setNewRecordForm] = useState({ summary: '', notes: '' });
+  const [newRecordMessage, setNewRecordMessage] = useState('');
+  const [newRecordError, setNewRecordError] = useState('');
 
   useEffect(() => {
     loadProfile();
     loadPatients();
+    loadRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -44,8 +59,19 @@ export default function MedicalDashboard() {
     try {
       const payload = await apiRequest('/api/medical/patients', { token });
       setPatients(payload.patients || []);
+      setPatientError('');
     } catch (err) {
       setPatientError(err.message);
+    }
+  }
+
+  async function loadRequests() {
+    try {
+      const payload = await apiRequest('/api/medical/access/requests', { token });
+      setRequests(payload.requests || []);
+      setRequestsError('');
+    } catch (err) {
+      setRequestsError(err.message);
     }
   }
 
@@ -53,9 +79,10 @@ export default function MedicalDashboard() {
     try {
       const payload = await apiRequest(`/api/medical/patients/${userId}/records`, { token });
       setPatientRecords(payload.records || []);
-      setPatientError('');
+      setNewRecordError('');
+      setNewRecordMessage('');
     } catch (err) {
-      setPatientError(err.message);
+      setNewRecordError(err.message);
       setPatientRecords([]);
     }
   }
@@ -94,9 +121,62 @@ export default function MedicalDashboard() {
     }
   };
 
+  const handleSearch = async (evt) => {
+    evt.preventDefault();
+    setSearchError('');
+    setRequestStatus('');
+    setRequestErrorMsg('');
+    try {
+      const payload = await apiRequest(`/api/medical/search-users?query=${encodeURIComponent(searchTerm)}`, {
+        token,
+      });
+      setSearchResults(payload.users || []);
+    } catch (err) {
+      setSearchError(err.message);
+      setSearchResults([]);
+    }
+  };
+
+  const handleSendRequest = async (userId) => {
+    setRequestStatus('');
+    setRequestErrorMsg('');
+    try {
+      await apiRequest('/api/medical/access/request', {
+        method: 'POST',
+        token,
+        body: { user_id: userId, message: requestNote },
+      });
+      setRequestStatus('Request submitted.');
+      setRequestNote('');
+      await Promise.all([loadRequests(), loadPatients()]);
+    } catch (err) {
+      setRequestErrorMsg(err.message);
+    }
+  };
+
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient);
+    setNewRecordForm({ summary: '', notes: '' });
     loadPatientRecords(patient.id);
+  };
+
+  const handleCreateRecord = async (evt) => {
+    evt.preventDefault();
+    if (!selectedPatient) return;
+    setNewRecordError('');
+    setNewRecordMessage('');
+    try {
+      await apiRequest(`/api/medical/patients/${selectedPatient.id}/records`, {
+        method: 'POST',
+        token,
+        body: { data: { summary: newRecordForm.summary, notes: newRecordForm.notes } },
+      });
+      setNewRecordMessage('Record saved.');
+      setNewRecordForm({ summary: '', notes: '' });
+      loadPatientRecords(selectedPatient.id);
+    } catch (err) {
+      setNewRecordError(err.message);
+    }
   };
 
   return (
@@ -193,6 +273,89 @@ export default function MedicalDashboard() {
       </div>
 
       <div className="panel">
+        <h3>Request Patient Access</h3>
+        {searchError && <div className="alert alert-error">{searchError}</div>}
+        {requestStatus && <div className="alert alert-success">{requestStatus}</div>}
+        {requestErrorMsg && <div className="alert alert-error">{requestErrorMsg}</div>}
+        <form className="form-grid" onSubmit={handleSearch}>
+          <label>
+            Search by Name or MUID
+            <input value={searchTerm} onChange={(evt) => setSearchTerm(evt.target.value)} required />
+          </label>
+          <button type="submit">Search</button>
+        </form>
+        {searchResults.length > 0 && (
+          <div className="panel">
+            <h4>Results</h4>
+            <label>
+              Optional message to patient
+              <textarea
+                rows="2"
+                value={requestNote}
+                onChange={(evt) => setRequestNote(evt.target.value)}
+              />
+            </label>
+            <table className="table-like">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>MUID</th>
+                  <th>Email</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {searchResults.map((user) => (
+                  <tr key={user.id}>
+                    <td>{user.name}</td>
+                    <td>{user.muid}</td>
+                    <td>{user.email}</td>
+                    <td>
+                      <button type="button" onClick={() => handleSendRequest(user.id)}>
+                        Request Access
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Access Requests</h3>
+        {requestsError && <div className="alert alert-error">{requestsError}</div>}
+        {requests.length === 0 && <p>No requests yet.</p>}
+        {requests.length > 0 && (
+          <table className="table-like">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>MUID</th>
+                <th>Status</th>
+                <th>Requested</th>
+                <th>Responded</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((req) => (
+                <tr key={req.id}>
+                  <td>{req.name}</td>
+                  <td>{req.muid}</td>
+                  <td>{req.status}</td>
+                  <td>{new Date(req.created_at).toLocaleString()}</td>
+                  <td>{req.responded_at ? new Date(req.responded_at).toLocaleString() : '—'}</td>
+                  <td>{req.requested_message || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="panel">
         <h3>My Patients</h3>
         {patientError && <div className="alert alert-error">{patientError}</div>}
         {patients.length === 0 && <p>No patients have granted access.</p>}
@@ -204,6 +367,7 @@ export default function MedicalDashboard() {
                 <th>MUID</th>
                 <th>Email</th>
                 <th>Access Since</th>
+                <th>Expires</th>
                 <th></th>
               </tr>
             </thead>
@@ -214,6 +378,11 @@ export default function MedicalDashboard() {
                   <td>{patient.muid}</td>
                   <td>{patient.email}</td>
                   <td>{new Date(patient.access_granted_at).toLocaleString()}</td>
+                  <td>
+                    {patient.access_expires_at
+                      ? new Date(patient.access_expires_at).toLocaleString()
+                      : 'No expiry'}
+                  </td>
                   <td>
                     <button type="button" onClick={() => handleSelectPatient(patient)}>
                       View Records
@@ -229,6 +398,28 @@ export default function MedicalDashboard() {
       {selectedPatient && (
         <div className="panel">
           <h3>Records for {selectedPatient.name}</h3>
+          {newRecordError && <div className="alert alert-error">{newRecordError}</div>}
+          {newRecordMessage && <div className="alert alert-success">{newRecordMessage}</div>}
+          <form className="form-grid" onSubmit={handleCreateRecord}>
+            <label>
+              Summary
+              <input
+                value={newRecordForm.summary}
+                onChange={(evt) => setNewRecordForm((prev) => ({ ...prev, summary: evt.target.value }))}
+                required
+              />
+            </label>
+            <label>
+              Notes
+              <textarea
+                rows="3"
+                value={newRecordForm.notes}
+                onChange={(evt) => setNewRecordForm((prev) => ({ ...prev, notes: evt.target.value }))}
+                required
+              />
+            </label>
+            <button type="submit">Add Record</button>
+          </form>
           {patientRecords.length === 0 && <p>No records available.</p>}
           {patientRecords.map((record) => (
             <div key={record.id} style={{ marginBottom: '12px', borderBottom: '1px solid #ccc', paddingBottom: '8px' }}>

@@ -80,11 +80,11 @@ router.put('/me/password', async (req, res) => {
 router.get('/access', async (req, res) => {
   try {
     const result = await query(
-      `SELECT a.id, a.medical_professional_id, a.access_granted_at, a.access_revoked_at,
+      `SELECT a.id, a.medical_professional_id, a.access_granted_at, a.access_revoked_at, a.access_expires_at,
               mp.name, mp.email, mp.mobile, mp.company
        FROM access a
        JOIN medical_professionals mp ON mp.id = a.medical_professional_id
-       WHERE a.user_id = $1 AND a.access_revoked_at IS NULL
+       WHERE a.user_id = $1 AND a.access_revoked_at IS NULL AND (a.access_expires_at IS NULL OR a.access_expires_at > NOW())
        ORDER BY a.access_granted_at DESC`,
       [req.auth.id]
     );
@@ -103,34 +103,7 @@ router.post('/access/grant', async (req, res) => {
   }
 
   try {
-    const professionalRes = await query(
-      'SELECT id, is_approved FROM medical_professionals WHERE id = $1',
-      [professionalIdNumber]
-    );
-    if (professionalRes.rowCount === 0) {
-      return res.status(404).json({ message: 'Medical professional not found' });
-    }
-    if (!professionalRes.rows[0].is_approved) {
-      return res.status(400).json({ message: 'Medical professional is not approved' });
-    }
-
-    const activeRes = await query(
-      `SELECT id FROM access
-       WHERE user_id = $1 AND medical_professional_id = $2 AND access_revoked_at IS NULL`,
-      [req.auth.id, professionalIdNumber]
-    );
-    if (activeRes.rowCount > 0) {
-      return res.status(400).json({ message: 'Access already granted' });
-    }
-
-    const result = await query(
-      `INSERT INTO access (user_id, medical_professional_id, access_granted_at, access_revoked_at)
-       VALUES ($1, $2, NOW(), NULL)
-       RETURNING id, user_id, medical_professional_id, access_granted_at`,
-      [req.auth.id, professionalIdNumber]
-    );
-
-    return res.status(201).json({ message: 'Access granted', access: result.rows[0] });
+    return res.status(410).json({ message: 'Manual grants replaced by request workflow.' });
   } catch (err) {
     console.error('Failed to grant access', err);
     return res.status(500).json({ message: 'Failed to grant access' });
@@ -159,6 +132,106 @@ router.post('/access/revoke', async (req, res) => {
   } catch (err) {
     console.error('Failed to revoke access', err);
     return res.status(500).json({ message: 'Failed to revoke access' });
+  }
+});
+
+router.get('/access/requests', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT ar.id, ar.medical_professional_id, ar.status, ar.requested_message, ar.created_at, ar.updated_at,
+              mp.name, mp.email, mp.mobile, mp.company
+       FROM access_requests ar
+       JOIN medical_professionals mp ON mp.id = ar.medical_professional_id
+       WHERE ar.user_id = $1 AND ar.status = 'pending'
+       ORDER BY ar.created_at DESC`,
+      [req.auth.id]
+    );
+    return res.json({ requests: result.rows });
+  } catch (err) {
+    console.error('Failed to load access requests', err);
+    return res.status(500).json({ message: 'Failed to load access requests' });
+  }
+});
+
+router.post('/access/requests/:requestId/respond', async (req, res) => {
+  const requestId = Number(req.params.requestId);
+  const { decision, expires_at: expiresAt } = req.body;
+  if (!Number.isInteger(requestId)) {
+    return res.status(400).json({ message: 'Invalid request id' });
+  }
+  if (!['approve', 'decline'].includes(decision)) {
+    return res.status(400).json({ message: 'Decision must be approve or decline' });
+  }
+
+  try {
+    const requestRes = await query(
+      `SELECT id, user_id, medical_professional_id
+       FROM access_requests
+       WHERE id = $1 AND user_id = $2 AND status = 'pending'`,
+      [requestId, req.auth.id]
+    );
+    if (requestRes.rowCount === 0) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    if (decision === 'decline') {
+      await query(
+        `UPDATE access_requests
+         SET status = 'declined', responded_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [requestId]
+      );
+      return res.json({ message: 'Access request declined' });
+    }
+
+    let expiresTimestamp = null;
+    if (expiresAt) {
+      const expiresDate = new Date(expiresAt);
+      if (Number.isNaN(expiresDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid expiration date' });
+      }
+      if (expiresDate.getTime() <= Date.now()) {
+        return res.status(400).json({ message: 'Expiration must be in the future' });
+      }
+      expiresTimestamp = expiresDate.toISOString();
+    }
+    if (!expiresTimestamp) {
+      expiresTimestamp = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    }
+
+    const activeCheck = await query(
+      `SELECT id FROM access
+       WHERE user_id = $1 AND medical_professional_id = $2 AND access_revoked_at IS NULL
+         AND (access_expires_at IS NULL OR access_expires_at > NOW())`,
+      [requestRes.rows[0].user_id, requestRes.rows[0].medical_professional_id]
+    );
+    if (activeCheck.rowCount > 0) {
+      await query(
+        `UPDATE access_requests
+         SET status = 'approved', responded_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [requestId]
+      );
+      return res.json({ message: 'Access already active' });
+    }
+
+    await query(
+      `INSERT INTO access (user_id, medical_professional_id, access_granted_at, access_expires_at)
+       VALUES ($1, $2, NOW(), $3)`,
+      [requestRes.rows[0].user_id, requestRes.rows[0].medical_professional_id, expiresTimestamp]
+    );
+
+    await query(
+      `UPDATE access_requests
+       SET status = 'approved', responded_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [requestId]
+    );
+
+    return res.json({ message: 'Access granted' });
+  } catch (err) {
+    console.error('Failed to respond to access request', err);
+    return res.status(500).json({ message: 'Failed to respond to access request' });
   }
 });
 
