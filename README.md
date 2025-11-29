@@ -1,0 +1,80 @@
+# Medical Access Control MVP
+
+A minimal full-stack application that lets patients control access to their encrypted medical records. Admins approve accounts and medical professionals can only see patient data after access is granted.
+
+## Project Structure
+
+```
+actual-vscode/
+├── client/   # React SPA
+└── server/   # Express + PostgreSQL API
+```
+
+## Prerequisites
+
+- Node.js 18+
+- PostgreSQL 14+ with a database ready for the app
+
+## Environment Variables
+
+Copy `.env.example` to `.env` (adjust as needed for server and client).
+
+Required values:
+
+- `DATABASE_URL` – Postgres connection string, e.g. `postgresql://user:pass@localhost:5432/hipaa_mvp`
+- `JWT_SECRET` – long random string for signing tokens
+- `AES_KEY` – 32 byte key in base64 or hex (e.g. `openssl rand -base64 32`)
+- `PORT` – optional, defaults to 4000
+- `VITE_API_URL` – client API base (defaults to `http://localhost:4000`)
+
+## Backend Setup
+
+```bash
+cd server
+npm install
+npm run migrate
+npm run seed
+npm run dev
+```
+
+The seed script creates:
+
+- Admins: `admin1` / `AdminPass123!`, `admin2` / `AdminPass456!`
+- Approved users: `alice.patient@example.com` / `PatientPass123!`, `bob.patient@example.com` / `PatientPass456!`
+- Approved medical professionals: `drsarah` / `DoctorPass123!`, `drjohn` / `DoctorPass456!`
+
+## Frontend Setup
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+Open the address Vite prints (default `http://localhost:5173`).
+
+## Core Flows to Try
+
+1. Register a new patient or medical professional
+2. Sign in as `admin1` and approve pending accounts
+3. Sign in as the new user and create records, grant access
+4. Sign in as an approved medical professional to view shared records
+
+## Security Notes
+
+- Passwords hashed with bcrypt
+- JWT auth with role claims protects all sensitive endpoints
+- Medical record payloads encrypted at rest using AES-256-GCM
+- All database queries use parameterised statements via `pg`
+
+## Testing Checklist
+
+Manual happy-path tests:
+
+- [ ] User registration → admin approval → login
+- [ ] Record creation and retrieval (patient)
+- [ ] Access grant/revoke (patient)
+- [ ] Record visibility (medical professional)
+- [ ] Admin approval for users and professionals
+
+Extend with automated tests as the system evolves.
