@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function UserProfilePage() {
-  const { token } = useAuth();
+  const { token, clearAuth } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState({ name: '', email: '', mobile: '', address: '' });
   const [profileMessage, setProfileMessage] = useState('');
@@ -66,6 +68,11 @@ export default function UserProfilePage() {
     } catch (err) {
       setPasswordError(err.message);
     }
+  };
+
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/');
   };
 
   return (
@@ -157,6 +164,16 @@ export default function UserProfilePage() {
           </label>
           <button type="submit">Update Password</button>
         </form>
+      </div>
+
+      <div className="panel profile-logout-panel">
+        <div>
+          <h2>Session</h2>
+          <p className="muted">Sign out when you are done reviewing your records.</p>
+        </div>
+        <button type="button" className="logout-button" onClick={handleLogout}>
+          Log Out
+        </button>
       </div>
     </>
   );
