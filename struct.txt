@@ -1,0 +1,117 @@
+HIPPA-Compliant Medical Data Management System
+Overview:
+    This project involves developing a HIPAA-compliant medical data management system that ensures the secure handling,
+userdata privacy, and integrity of sensitive medical information. The system will be designed to meet the stringent requirements
+of the Health Insurance Portability and Accountability Act (HIPAA). User can control who can access their medical data and can also revoke access.
+
+Models: 
+    User: 
+        Id; (primary key)
+        MUID; (Medical Unique Identifier) Structure :{
+            "MI" + last 2 Digits of year of birth + 4 digit random number + aadition of fisrst name's alphabets in lowercase ASCII values's first 4 digts
+            }
+        password;
+        name;
+        email;
+        mobile;
+        address;
+        Records{ OneToMany} (relationship with Record model)}
+        accessList {Access.Id} (list of access records for medical professionals who have access to the user's data)
+        accessLogs { OneToMany} (relationship with Access model to track access history)
+
+    MedicalProfessional:
+        Id; (primary key)
+        username;
+        password;
+        name;
+        email;
+        mobile;
+        address;
+        company;
+        accessList { User.Id} (list of users whose medical data the professional can access)
+        
+    Record:
+        Id; (primary key)
+        userId; (foreign key referencing User)
+        medicalProfessionalId; (foreign key referencing MedicalProfessional who created the record)
+        data; (encrypted medical data)
+        createdAt; (timestamp)
+        updatedAt; (timestamp)
+
+    Access:
+        Id; (primary key)
+        userId; (foreign key referencing User)
+        medicalProfessionalId; (foreign key referencing MedicalProfessional)
+        accessGrantedAt; (timestamp when access was granted)
+        accessRevokedAt; (timestamp when access was revoked, null if access is still active)
+
+    Admin:
+        Id; (primary key)
+        username;
+        password;
+        name;
+        email;
+        mobile;
+        address;
+        userIdApproved: { User.Id} (list of users approved by the admin)
+        medicalProfessionalApproved: { MedicalProfessional.Id} (list of medical professionals approved by the admin)
+
+Pages:
+    HomePage:
+        - Welcome message
+        - Overview of the system
+        - Links to Login and Registration pages 
+
+    UserRegistrationPage:
+        - Form to register as a User
+        - Fields: username, password, name, email, mobile, address
+        - Submit button
+
+    MedicalProfessionalRegistrationPage:
+        - Form to register as a Medical Professional
+        - Fields: username, password, name, email, mobile, address, company
+        - Submit button
+
+    LoginPage:
+        - Form to log in as User or Medical Professional
+        - Fields: username, password
+        - Submit button
+
+    UserDashboard:
+        - View and manage personal information
+        - Upload and view medical records
+        - Manage access list (grant/revoke access to medical professionals)
+        - Edit, Update personal information and reset password. (MUID cannot be changed)
+
+    MedicalProfessionalDashboard:
+        - View and manage personal information
+        - View list of users with granted access
+        - Access medical records of users in access list
+        - Request access to User's medical data and request access to share medical records with other professionals.
+        - Edit, Update personal information and reset password.
+
+
+    AdminDashboard:
+        - View and manage all users and medical professionals
+        - Approve or reject registrations
+        - Monitor access logs and compliance reports           
+
+Costrains:     
+    - Ensure all data is encrypted both in transit and at rest.
+    - Implement JWT authentication and authorization mechanisms.
+    - Provide users with the ability to control access to their medical data.
+
+UI:
+    - Clean and intuitive interface
+    - Very Light weight design 
+    - Early 2010s web design style (Windows 7 era design)
+    - No Bullshit animations or fancy design
+    - Clear navigation menus for easy access to different sections
+    
+
+Technologies:
+    - Backend: Node.js with Express.js
+    - Database: PostgreSQL
+    - Authentication: JWT (JSON Web Tokens)
+    - Encryption: AES256 (Advanced Encryption Standard)
+    - Frontend: React.js

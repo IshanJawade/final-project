@@ -31,6 +31,7 @@ const users = [
     mobile: '555-2001',
     address: '100 Main Street',
     password: 'NewPassword',
+    // MUID: MI8563470510
   },
   {
     name: 'Bob Patient',
@@ -39,6 +40,7 @@ const users = [
     mobile: '555-2002',
     address: '101 Main Street',
     password: 'PatientPass456!',
+    // MUID: MI9013170307
   },
 ];
 

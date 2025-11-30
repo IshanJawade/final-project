@@ -1,5 +1,5 @@
 import React from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
@@ -7,9 +7,15 @@ import HomePage from './pages/HomePage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterUserPage from './pages/RegisterUserPage.jsx';
 import RegisterMedicalPage from './pages/RegisterMedicalPage.jsx';
-import UserDashboard from './pages/UserDashboard.jsx';
-import MedicalDashboard from './pages/MedicalDashboard.jsx';
-import AdminDashboard from './pages/AdminDashboard.jsx';
+import UserProfilePage from './pages/UserProfilePage.jsx';
+import UserRecordsPage from './pages/UserRecordsPage.jsx';
+import UserAccessPage from './pages/UserAccessPage.jsx';
+import MedicalProfilePage from './pages/MedicalProfilePage.jsx';
+import MedicalPatientsPage from './pages/MedicalPatientsPage.jsx';
+import MedicalRequestsPage from './pages/MedicalRequestsPage.jsx';
+import AdminProfilePage from './pages/AdminProfilePage.jsx';
+import AdminUsersPage from './pages/AdminUsersPage.jsx';
+import AdminProfessionalsPage from './pages/AdminProfessionalsPage.jsx';
 
 export default function App() {
   return (
@@ -21,26 +27,101 @@ export default function App() {
           <Route path="/register/user" element={<RegisterUserPage />} />
           <Route path="/register/medical" element={<RegisterMedicalPage />} />
           <Route
-            path="/dashboard/user"
+            path="/user/profile"
             element={
               <ProtectedRoute allow={["user"]}>
-                <UserDashboard />
+                <UserProfilePage />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/dashboard/medical"
+            path="/user/records"
+            element={
+              <ProtectedRoute allow={["user"]}>
+                <UserRecordsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/access"
+            element={
+              <ProtectedRoute allow={["user"]}>
+                <UserAccessPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/medical/profile"
             element={
               <ProtectedRoute allow={["medical"]}>
-                <MedicalDashboard />
+                <MedicalProfilePage />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/dashboard/admin"
+            path="/medical/patients"
+            element={
+              <ProtectedRoute allow={["medical"]}>
+                <MedicalPatientsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/medical/requests"
+            element={
+              <ProtectedRoute allow={["medical"]}>
+                <MedicalRequestsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/profile"
             element={
               <ProtectedRoute allow={["admin"]}>
-                <AdminDashboard />
+                <AdminProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/pending-users"
+            element={
+              <ProtectedRoute allow={["admin"]}>
+                <AdminUsersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/pending-professionals"
+            element={
+              <ProtectedRoute allow={["admin"]}>
+                <AdminProfessionalsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/dashboard/user" element={<Navigate to="/user/profile" replace />} />
+          <Route path="/dashboard/medical" element={<Navigate to="/medical/profile" replace />} />
+          <Route path="/dashboard/admin" element={<Navigate to="/admin/profile" replace />} />
+          <Route
+            path="/user"
+            element={
+              <ProtectedRoute allow={["user"]}>
+                <Navigate to="/user/profile" replace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/medical"
+            element={
+              <ProtectedRoute allow={["medical"]}>
+                <Navigate to="/medical/profile" replace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allow={["admin"]}>
+                <Navigate to="/admin/profile" replace />
               </ProtectedRoute>
             }
           />

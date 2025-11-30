@@ -55,11 +55,13 @@ Open the address Vite prints (default `http://localhost:5173`).
 
 ## Core Flows to Try
 
+Top navigation now exposes dedicated pages for each role (Profile, Records/Patients, Access/Requests). After signing in, use the right-aligned tabs to jump between workflows.
+
 1. Register a new patient or medical professional
 2. Sign in as `admin1` and approve pending accounts
-3. Sign in as an approved medical professional, search for a patient, and submit an access request
-4. Sign in as the patient, approve or decline pending requests (optionally set an expiry), and download records
-5. With access granted, sign in as the medical professional to add a new record and confirm it appears in the patient portal
+3. Sign in as an approved medical professional, search for a patient, and submit an access request (Access Requests tab)
+4. Sign in as the patient, approve or decline pending requests (Access tab, optionally set an expiry), and download records (Records tab)
+5. With access granted, sign in as the medical professional to add a new record (Patients tab) and confirm it appears in the patient portal
 
 ## Security Notes
 

@@ -30,11 +30,11 @@ export default function LoginPage() {
       });
       setAuth({ token: payload.token, role: payload.role, account: payload.account });
       if (payload.role === 'user') {
-        navigate('/dashboard/user');
+        navigate('/user/profile');
       } else if (payload.role === 'medical') {
-        navigate('/dashboard/medical');
+        navigate('/medical/profile');
       } else if (payload.role === 'admin') {
-        navigate('/dashboard/admin');
+        navigate('/admin/profile');
       } else {
         navigate('/');
       }
