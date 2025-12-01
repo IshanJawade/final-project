@@ -6,6 +6,115 @@ import { query } from '../db.js';
 const router = Router();
 router.use(requireAdmin);
 
+router.get('/stats', async (req, res) => {
+  try {
+    const [
+      totalUsersRes,
+      approvedUsersRes,
+      pendingUsersRes,
+      onlineUsersRes,
+      totalProsRes,
+      approvedProsRes,
+      pendingProsRes,
+      onlineProsRes,
+      totalRecordsRes,
+      recentRecordsRes,
+      activeAccessRes,
+      pendingRequestsRes,
+    ] = await Promise.all([
+      query('SELECT COUNT(*)::int AS count FROM users'),
+      query('SELECT COUNT(*)::int AS count FROM users WHERE is_approved = TRUE'),
+      query('SELECT COUNT(*)::int AS count FROM users WHERE is_approved = FALSE'),
+      query(
+        `SELECT COUNT(*)::int AS count
+           FROM users
+          WHERE is_approved = TRUE
+            AND last_login_at IS NOT NULL
+            AND last_login_at > NOW() - INTERVAL '15 minutes'`
+      ),
+      query('SELECT COUNT(*)::int AS count FROM medical_professionals'),
+      query('SELECT COUNT(*)::int AS count FROM medical_professionals WHERE is_approved = TRUE'),
+      query('SELECT COUNT(*)::int AS count FROM medical_professionals WHERE is_approved = FALSE'),
+      query(
+        `SELECT COUNT(*)::int AS count
+           FROM medical_professionals
+          WHERE is_approved = TRUE
+            AND last_login_at IS NOT NULL
+            AND last_login_at > NOW() - INTERVAL '15 minutes'`
+      ),
+      query('SELECT COUNT(*)::int AS count FROM records'),
+      query("SELECT COUNT(*)::int AS count FROM records WHERE created_at > NOW() - INTERVAL '24 hours'"),
+      query(
+        `SELECT COUNT(*)::int AS count
+           FROM access
+          WHERE access_revoked_at IS NULL
+            AND (access_expires_at IS NULL OR access_expires_at > NOW())`
+      ),
+      query("SELECT COUNT(*)::int AS count FROM access_requests WHERE status = 'pending'"),
+    ]);
+
+    const parseCount = (res) => (res?.rows?.[0]?.count ? Number(res.rows[0].count) : 0);
+
+    return res.json({
+      stats: {
+        users: {
+          total: parseCount(totalUsersRes),
+          approved: parseCount(approvedUsersRes),
+          pending: parseCount(pendingUsersRes),
+          online: parseCount(onlineUsersRes),
+        },
+        professionals: {
+          total: parseCount(totalProsRes),
+          approved: parseCount(approvedProsRes),
+          pending: parseCount(pendingProsRes),
+          online: parseCount(onlineProsRes),
+        },
+        records: {
+          total: parseCount(totalRecordsRes),
+          last24h: parseCount(recentRecordsRes),
+        },
+        access: {
+          activeGrants: parseCount(activeAccessRes),
+          pendingRequests: parseCount(pendingRequestsRes),
+        },
+      },
+    });
+  } catch (err) {
+    console.error('Failed to load admin stats', err);
+    return res.status(500).json({ message: 'Failed to load stats' });
+  }
+});
+
+router.get('/users', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, name, email, muid, year_of_birth
+         FROM users
+        WHERE is_approved = TRUE
+        ORDER BY created_at DESC`
+    );
+    return res.json({ users: result.rows });
+  } catch (err) {
+    console.error('Failed to load users list', err);
+    return res.status(500).json({ message: 'Failed to load users' });
+  }
+});
+
+router.get('/professionals', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, name, email, company
+         FROM medical_professionals
+        WHERE is_approved = TRUE
+        ORDER BY created_at DESC`
+    );
+    return res.json({ medicalProfessionals: result.rows });
+  } catch (err) {
+    console.error('Failed to load professionals list', err);
+    return res.status(500).json({ message: 'Failed to load professionals' });
+  }
+});
+
 router.get('/me', async (req, res) => {
   try {
     const adminId = req.auth?.id;

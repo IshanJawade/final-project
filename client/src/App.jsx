@@ -10,12 +10,14 @@ import RegisterMedicalPage from './pages/RegisterMedicalPage.jsx';
 import UserProfilePage from './pages/UserProfilePage.jsx';
 import UserRecordsPage from './pages/UserRecordsPage.jsx';
 import UserAccessPage from './pages/UserAccessPage.jsx';
+import UserDashboard from './pages/UserDashboard.jsx';
 import MedicalProfilePage from './pages/MedicalProfilePage.jsx';
 import MedicalPatientsPage from './pages/MedicalPatientsPage.jsx';
 import MedicalRequestsPage from './pages/MedicalRequestsPage.jsx';
 import AdminProfilePage from './pages/AdminProfilePage.jsx';
 import AdminUsersPage from './pages/AdminUsersPage.jsx';
 import AdminProfessionalsPage from './pages/AdminProfessionalsPage.jsx';
+import AdminDashboard from './pages/AdminDashboard.jsx';
 
 export default function App() {
   return (
@@ -26,6 +28,14 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register/user" element={<RegisterUserPage />} />
           <Route path="/register/medical" element={<RegisterMedicalPage />} />
+          <Route
+            path="/user/dashboard"
+            element={
+              <ProtectedRoute allow={["user"]}>
+                <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/user/profile"
             element={
@@ -83,6 +93,14 @@ export default function App() {
             }
           />
           <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute allow={["admin"]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/pending-users"
             element={
               <ProtectedRoute allow={["admin"]}>
@@ -98,14 +116,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/dashboard/user" element={<Navigate to="/user/profile" replace />} />
+          <Route path="/dashboard/user" element={<Navigate to="/user/dashboard" replace />} />
           <Route path="/dashboard/medical" element={<Navigate to="/medical/profile" replace />} />
-          <Route path="/dashboard/admin" element={<Navigate to="/admin/profile" replace />} />
+          <Route path="/dashboard/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route
             path="/user"
             element={
               <ProtectedRoute allow={["user"]}>
-                <Navigate to="/user/profile" replace />
+                <Navigate to="/user/dashboard" replace />
               </ProtectedRoute>
             }
           />
@@ -121,7 +139,7 @@ export default function App() {
             path="/admin"
             element={
               <ProtectedRoute allow={["admin"]}>
-                <Navigate to="/admin/profile" replace />
+                <Navigate to="/admin/dashboard" replace />
               </ProtectedRoute>
             }
           />

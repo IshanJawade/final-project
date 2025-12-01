@@ -159,7 +159,11 @@ export default function UserAccessPage() {
                       : 'No expiry'}
                   </td>
                   <td>
-                    <button type="button" onClick={() => handleRevoke(entry.medical_professional_id)}>
+                    <button
+                      type="button"
+                      className="button-danger"
+                      onClick={() => handleRevoke(entry.medical_professional_id)}
+                    >
                       Revoke Access
                     </button>
                   </td>

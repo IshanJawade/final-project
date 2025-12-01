@@ -7,6 +7,7 @@ function getNavLinks(role) {
   switch (role) {
     case 'user':
       return [
+        { to: '/user/dashboard', label: 'Dashboard' },
         { to: '/user/records', label: 'Records' },
         { to: '/user/access', label: 'Access' },
         { to: '/user/profile', label: 'Profile', icon: 'profile' },
@@ -19,6 +20,7 @@ function getNavLinks(role) {
       ];
     case 'admin':
       return [
+        { to: '/admin/dashboard', label: 'Dashboard' },
         { to: '/admin/pending-users', label: 'Users' },
         { to: '/admin/pending-professionals', label: 'Professionals' },
         { to: '/admin/profile', label: 'Profile', icon: 'profile' },

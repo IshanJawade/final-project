@@ -141,8 +141,17 @@ router.post('/login', async (req, res) => {
       },
     };
 
-    if (resolvedRole === 'user') {
-      responsePayload.account.muid = account.muid;
+    try {
+      if (resolvedRole === 'user') {
+        await query('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [account.id]);
+        responsePayload.account.muid = account.muid;
+      } else if (resolvedRole === 'medical') {
+        await query('UPDATE medical_professionals SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [account.id]);
+      } else if (resolvedRole === 'admin') {
+        await query('UPDATE admins SET updated_at = NOW() WHERE id = $1', [account.id]);
+      }
+    } catch (recordErr) {
+      console.error('Failed to record login activity', recordErr);
     }
 
     return res.json(responsePayload);

@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+ALTER TABLE medical_professionals ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;

@@ -6,6 +6,47 @@ import { query } from '../db.js';
 const router = Router();
 router.use(requireUser);
 
+router.get('/dashboard', async (req, res) => {
+  const userId = req.auth?.id;
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const [accessCountRes, recordCountRes, pendingRequestsRes] = await Promise.all([
+      query(
+        `SELECT COUNT(*)::int AS count
+           FROM access
+          WHERE user_id = $1
+            AND access_revoked_at IS NULL
+            AND (access_expires_at IS NULL OR access_expires_at > NOW())`,
+        [userId]
+      ),
+      query('SELECT COUNT(*)::int AS count FROM records WHERE user_id = $1', [userId]),
+      query(
+        `SELECT COUNT(*)::int AS count
+           FROM access_requests
+          WHERE user_id = $1
+            AND status = 'pending'`,
+        [userId]
+      ),
+    ]);
+
+    const safeCount = (res) => (res?.rows?.[0]?.count ? Number(res.rows[0].count) : 0);
+
+    return res.json({
+      stats: {
+        activeAccess: safeCount(accessCountRes),
+        totalRecords: safeCount(recordCountRes),
+        pendingRequests: safeCount(pendingRequestsRes),
+      },
+    });
+  } catch (err) {
+    console.error('Failed to load user dashboard stats', err);
+    return res.status(500).json({ message: 'Failed to load dashboard data' });
+  }
+});
+
 router.get('/me', async (req, res) => {
   try {
     const result = await query(
