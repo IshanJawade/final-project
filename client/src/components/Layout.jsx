@@ -155,13 +155,6 @@ export default function Layout({ children }) {
                     </NavLink>
                   ))}
                 </div>
-                <div className="profile-chip">
-                  <div className="profile-icon">{initials}</div>
-                  <div className="profile-details">
-                    <span className="profile-name">{account?.name || 'Account'}</span>
-                    <span className="profile-role">{role}</span>
-                  </div>
-                </div>
               </>
             )}
           </div>
