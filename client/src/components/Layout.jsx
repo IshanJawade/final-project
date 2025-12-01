@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { apiRequest } from '../api.js';
 
 function getNavLinks(role) {
   switch (role) {
@@ -47,9 +48,67 @@ function ProfileGlyph() {
 
 export default function Layout({ children }) {
   const { token, role, account } = useAuth();
+  const [profileSummary, setProfileSummary] = useState(null);
 
   const navLinks = useMemo(() => (token ? getNavLinks(role) : []), [token, role]);
   const initials = useMemo(() => getInitials(account?.name), [account]);
+
+  useEffect(() => {
+    if (!token) {
+      setProfileSummary(null);
+      return;
+    }
+
+    const endpointMap = {
+      user: '/api/user/me',
+      medical: '/api/medical/me',
+      admin: '/api/admin/me',
+    };
+
+    const entityKey = {
+      user: 'user',
+      medical: 'medicalProfessional',
+      admin: 'admin',
+    };
+
+    const endpoint = endpointMap[role];
+    if (!endpoint) {
+      setProfileSummary(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const payload = await apiRequest(endpoint, { token });
+        if (cancelled) {
+          return;
+        }
+        const entity = payload?.[entityKey[role]];
+        setProfileSummary(entity || null);
+      } catch (err) {
+        if (!cancelled) {
+          setProfileSummary(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, role]);
+
+  const summary = profileSummary || account || null;
+  const displayName = summary?.name || 'Account';
+  const displayMuid = summary?.muid && String(summary.muid).trim().length > 0 ? summary.muid : '—';
+  const rawDob =
+    summary?.dateOfBirth ??
+    summary?.date_of_birth ??
+    summary?.year_of_birth ??
+    summary?.yearOfBirth ??
+    null;
+  const displayDob = rawDob === null || rawDob === undefined || String(rawDob).trim() === '' ? '—' : String(rawDob);
 
   return (
     <div className="app-shell">
@@ -109,7 +168,32 @@ export default function Layout({ children }) {
         </div>
       </header>
       <main className="app-content">
-        <div className="page-container">{children}</div>
+        {token ? (
+          <div className="dashboard-grid">
+            <aside className="profile-sidebar" aria-label="Account summary">
+              <div className="avatar-placeholder" aria-hidden="true">
+                <span>{initials !== '?' ? initials : 'Avatar'}</span>
+              </div>
+              <dl className="profile-meta">
+                <div className="profile-meta-row">
+                  <dt>Name</dt>
+                  <dd>{displayName}</dd>
+                </div>
+                <div className="profile-meta-row">
+                  <dt>MUID</dt>
+                  <dd>{displayMuid || '—'}</dd>
+                </div>
+                <div className="profile-meta-row">
+                  <dt>Date of Birth</dt>
+                  <dd>{displayDob || '—'}</dd>
+                </div>
+              </dl>
+            </aside>
+            <div className="page-container">{children}</div>
+          </div>
+        ) : (
+          <div className="page-container">{children}</div>
+        )}
       </main>
     </div>
   );
