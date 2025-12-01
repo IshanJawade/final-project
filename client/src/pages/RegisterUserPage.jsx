@@ -44,11 +44,11 @@ export default function RegisterUserPage() {
   };
 
   return (
-    <div className="panel">
+    <div className="panel panel-auth">
       <h2>User Registration</h2>
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
-      <form className="form-grid" onSubmit={handleSubmit}>
+      <form className="form-grid form-stack" onSubmit={handleSubmit}>
         <label>
           Full Name
           <input name="name" value={form.name} onChange={handleChange} required />

@@ -9,12 +9,12 @@ export default function HomePage() {
         This pilot system gives patients direct control over who can view their medical records. Admins
         review all accounts, and medical professionals only see records when granted access.
       </p>
-      <p>Get started by creating an account or signing in.</p>
-      <div className="home-actions">
+      <p>Get started by creating an account or signing in from top bar.</p>
+      {/* <div className="home-actions">
         <Link to="/login">Login</Link>
         <Link to="/register/user">User Registration</Link>
         <Link to="/register/medical">Professional Registration</Link>
-      </div>
+      </div> */}
     </div>
   );
 }

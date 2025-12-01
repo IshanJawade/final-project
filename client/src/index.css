@@ -18,6 +18,12 @@
   --warning: #b45309;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -40,9 +46,11 @@ a:hover {
 
 .app-shell {
   min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
 }
 
 .app-header {
@@ -51,6 +59,9 @@ a:hover {
   padding: 20px 32px;
   border-bottom: 4px solid rgba(255, 255, 255, 0.07);
   box-shadow: var(--shadow-hard);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 .app-header-inner {
@@ -182,6 +193,7 @@ a:hover {
   display: flex;
   justify-content: center;
   padding: 56px 32px 72px;
+  overflow-y: auto;
 }
 
 .page-container {
@@ -192,6 +204,7 @@ a:hover {
   gap: 32px;
   flex: 1;
   min-width: 0;
+  margin-top: 0;
 }
 
 .panel {
@@ -199,6 +212,12 @@ a:hover {
   border: 1px solid var(--border);
   padding: 32px;
   box-shadow: var(--shadow-soft);
+}
+
+.panel-auth {
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
 }
 
 .panel h2 {
@@ -219,8 +238,20 @@ form {
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 28px 36px;
+  row-gap: 28px;
+  column-gap: 32px;
   align-items: start;
+}
+
+.form-grid.form-stack {
+  grid-template-columns: 1fr;
+  column-gap: 0;
+  row-gap: 20px;
+  justify-items: stretch;
+}
+
+.form-grid.form-stack > label {
+  width: 100%;
 }
 
 .form-grid > button,
@@ -505,7 +536,7 @@ button:hover {
   display: flex;
   gap: 32px;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .profile-sidebar {
@@ -519,6 +550,9 @@ button:hover {
   min-width: 200px;
   max-width: 240px;
   align-self: flex-start;
+  margin-top: 32px;
+  position: sticky;
+  top: calc(56px + 32px);
 }
 
 .avatar-placeholder {
@@ -604,6 +638,8 @@ button:hover {
     align-items: center;
     justify-content: space-between;
     gap: 24px;
+    position: static;
+    margin-top: 0;
   }
 
   .avatar-placeholder {

@@ -115,7 +115,7 @@ export default function Layout({ children }) {
       <header className="app-header">
         <div className="app-header-inner">
           <div className="app-brand">
-            <Link to="/">Medical Access Control MVP</Link>
+            <Link to="/">MedSecure Access</Link>
           </div>
           <div className="app-nav-right">
             {!token && (

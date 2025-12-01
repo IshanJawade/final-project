@@ -46,10 +46,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="panel">
+    <div className="panel panel-auth">
       <h2>Sign In</h2>
       {error && <div className="alert alert-error">{error}</div>}
-      <form className="form-grid" onSubmit={handleSubmit}>
+      <form className="form-grid form-stack" onSubmit={handleSubmit}>
         <label>
           Username or Email
           <input

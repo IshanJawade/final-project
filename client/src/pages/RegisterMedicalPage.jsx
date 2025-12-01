@@ -42,11 +42,11 @@ export default function RegisterMedicalPage() {
   };
 
   return (
-    <div className="panel">
+    <div className="panel panel-auth">
       <h2>Medical Professional Registration</h2>
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
-      <form className="form-grid" onSubmit={handleSubmit}>
+      <form className="form-grid form-stack" onSubmit={handleSubmit}>
         <label>
           Username
           <input name="username" value={form.username} onChange={handleChange} required />
