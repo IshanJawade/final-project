@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAdminDirectory } from '../utils/useAdminDirectory.js';
+import { formatDateMMDDYYYY } from '../utils/date.js';
 
 export default function AdminUsersPage() {
   const { token } = useAuth();
@@ -41,6 +42,28 @@ export default function AdminUsersPage() {
     }
   };
 
+  const getFirstName = (record) => {
+    if (record?.first_name) return record.first_name;
+    if (record?.name) {
+      const parts = record.name.trim().split(/\s+/);
+      return parts[0] || '—';
+    }
+    return '—';
+  };
+
+  const getLastName = (record) => {
+    if (record?.last_name) return record.last_name;
+    if (record?.name) {
+      const parts = record.name.trim().split(/\s+/);
+      if (parts.length > 1) {
+        return parts.slice(1).join(' ');
+      }
+    }
+    return '—';
+  };
+
+  const formatDob = (value) => formatDateMMDDYYYY(value) || '—';
+
   return (
     <div className="panel-section">
       <div className="panel">
@@ -53,10 +76,12 @@ export default function AdminUsersPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th>First Name</th>
+                  <th>Last Name</th>
                   <th>Email</th>
                   <th>Mobile</th>
                   <th>Address</th>
+                  <th>Date of Birth</th>
                   <th>Registered</th>
                   <th></th>
                 </tr>
@@ -64,10 +89,12 @@ export default function AdminUsersPage() {
               <tbody>
                 {pendingUsers.map((user) => (
                   <tr key={user.id}>
-                    <td>{user.name}</td>
+                    <td>{getFirstName(user)}</td>
+                    <td>{getLastName(user)}</td>
                     <td>{user.email}</td>
                     <td>{user.mobile}</td>
                     <td>{user.address}</td>
+                    <td>{formatDob(user.date_of_birth)}</td>
                     <td>{new Date(user.created_at).toLocaleString()}</td>
                     <td>
                       <button type="button" onClick={() => approveUser(user.id)}>
@@ -92,19 +119,21 @@ export default function AdminUsersPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th>First Name</th>
+                  <th>Last Name</th>
                   <th>Email</th>
                   <th>MUID</th>
-                  <th>Birth Year</th>
+                  <th>Date of Birth</th>
                 </tr>
               </thead>
               <tbody>
                 {approvedUsers.map((user) => (
                   <tr key={user.id}>
-                    <td>{user.name}</td>
+                    <td>{getFirstName(user)}</td>
+                    <td>{getLastName(user)}</td>
                     <td>{user.email}</td>
                     <td>{user.muid || '—'}</td>
-                    <td>{user.year_of_birth || '—'}</td>
+                    <td>{formatDob(user.date_of_birth)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -88,7 +88,7 @@ router.get('/stats', async (req, res) => {
 router.get('/users', async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, name, email, muid, year_of_birth
+      `SELECT id, first_name, last_name, name, email, muid, date_of_birth, year_of_birth
          FROM users
         WHERE is_approved = TRUE
         ORDER BY created_at DESC`
@@ -194,7 +194,7 @@ router.put('/me/password', async (req, res) => {
 router.get('/pending-users', async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, name, email, mobile, address, muid, created_at
+      `SELECT id, first_name, last_name, name, email, mobile, address, date_of_birth, year_of_birth, muid, created_at
        FROM users
        WHERE is_approved = FALSE
        ORDER BY created_at`
@@ -216,7 +216,7 @@ router.post('/users/:id/approve', async (req, res) => {
     const result = await query(
       `UPDATE users SET is_approved = TRUE, updated_at = NOW()
        WHERE id = $1
-       RETURNING id, name, email, muid, is_approved`,
+       RETURNING id, first_name, last_name, name, email, muid, date_of_birth, year_of_birth, is_approved`,
       [userId]
     );
     if (result.rowCount === 0) {

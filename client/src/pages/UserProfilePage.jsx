@@ -2,12 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { formatDateMMDDYYYY } from '../utils/date.js';
 
 export default function UserProfilePage() {
   const { token, clearAuth } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
-  const [profileForm, setProfileForm] = useState({ name: '', email: '', mobile: '', address: '' });
+  const [profileForm, setProfileForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    mobile: '',
+    address: '',
+    dateOfBirth: '',
+  });
   const [profileMessage, setProfileMessage] = useState('');
   const [profileError, setProfileError] = useState('');
 
@@ -25,16 +33,23 @@ export default function UserProfilePage() {
       const payload = await apiRequest('/api/user/me', { token });
       setProfile(payload.user);
       setProfileForm({
-        name: payload.user.name || '',
+        firstName: payload.user.first_name || '',
+        lastName: payload.user.last_name || '',
         email: payload.user.email || '',
         mobile: payload.user.mobile || '',
         address: payload.user.address || '',
+        dateOfBirth: formatDateMMDDYYYY(payload.user.date_of_birth) || '',
       });
       setProfileError('');
     } catch (err) {
       setProfileError(err.message);
     }
   }
+
+  const handleProfileChange = (evt) => {
+    const { name, value } = evt.target;
+    setProfileForm((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleProfileSubmit = async (evt) => {
     evt.preventDefault();
@@ -88,13 +103,30 @@ export default function UserProfilePage() {
         {profileMessage && <div className="alert alert-success">{profileMessage}</div>}
         <form className="form-grid" onSubmit={handleProfileSubmit}>
           <label>
-            Name
+            First Name
             <input
-              name="name"
-              value={profileForm.name}
-              onChange={(evt) =>
-                setProfileForm((prev) => ({ ...prev, name: evt.target.value }))
-              }
+              name="firstName"
+              value={profileForm.firstName}
+              onChange={handleProfileChange}
+              required
+            />
+          </label>
+          <label>
+            Last Name
+            <input
+              name="lastName"
+              value={profileForm.lastName}
+              onChange={handleProfileChange}
+              required
+            />
+          </label>
+          <label>
+            Date of Birth (MM/DD/YYYY)
+            <input
+              name="dateOfBirth"
+              value={profileForm.dateOfBirth}
+              onChange={handleProfileChange}
+              placeholder="MM/DD/YYYY"
               required
             />
           </label>
@@ -104,9 +136,7 @@ export default function UserProfilePage() {
               name="email"
               type="email"
               value={profileForm.email}
-              onChange={(evt) =>
-                setProfileForm((prev) => ({ ...prev, email: evt.target.value }))
-              }
+              onChange={handleProfileChange}
               required
             />
           </label>
@@ -115,9 +145,7 @@ export default function UserProfilePage() {
             <input
               name="mobile"
               value={profileForm.mobile}
-              onChange={(evt) =>
-                setProfileForm((prev) => ({ ...prev, mobile: evt.target.value }))
-              }
+              onChange={handleProfileChange}
             />
           </label>
           <label>
@@ -126,9 +154,7 @@ export default function UserProfilePage() {
               name="address"
               rows="2"
               value={profileForm.address}
-              onChange={(evt) =>
-                setProfileForm((prev) => ({ ...prev, address: evt.target.value }))
-              }
+              onChange={handleProfileChange}
             />
           </label>
           <button type="submit">Save Profile</button>

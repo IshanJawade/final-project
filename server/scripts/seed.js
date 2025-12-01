@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { pool, query } from '../src/db.js';
 import { generateMuid } from '../src/utils/muid.js';
 import { encryptJson } from '../src/utils/encryption.js';
+import { normalizeDateOfBirth } from '../src/utils/dates.js';
 
 const admins = [
   {
@@ -25,22 +26,22 @@ const admins = [
 
 const users = [
   {
-    name: 'Alice Patient',
-    yearOfBirth: 1985,
+    firstName: 'Alice',
+    lastName: 'Patient',
+    dateOfBirth: '03/12/1985',
     email: 'alice.patient@example.com',
     mobile: '555-2001',
     address: '100 Main Street',
     password: 'NewPassword',
-    // MUID: MI8563470510
   },
   {
-    name: 'Bob Patient',
-    yearOfBirth: 1990,
+    firstName: 'Bob',
+    lastName: 'Patient',
+    dateOfBirth: '07/08/1990',
     email: 'bob.patient@example.com',
     mobile: '555-2002',
     address: '101 Main Street',
     password: 'PatientPass456!',
-    // MUID: MI9013170307
   },
 ];
 
@@ -98,23 +99,36 @@ async function upsertUser(user) {
   const email = user.email.toLowerCase();
   const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
   const passwordHash = await bcrypt.hash(user.password, 10);
+  const { iso: dobIso, year } = normalizeDateOfBirth(user.dateOfBirth);
+  const firstName = user.firstName.trim();
+  const lastName = user.lastName.trim();
+  const fullName = `${firstName} ${lastName}`.trim();
 
   if (existing.rowCount > 0) {
     await query(
       `UPDATE users
-       SET password_hash = $1, name = $2, mobile = $3, address = $4, is_approved = TRUE, updated_at = NOW()
-       WHERE id = $5`,
-      [passwordHash, user.name, user.mobile, user.address, existing.rows[0].id]
+       SET password_hash = $1,
+           first_name = $2,
+           last_name = $3,
+           name = $4,
+           mobile = $5,
+           address = $6,
+           date_of_birth = $7,
+           year_of_birth = $8,
+           is_approved = TRUE,
+           updated_at = NOW()
+       WHERE id = $9`,
+      [passwordHash, firstName, lastName, fullName, user.mobile, user.address, dobIso, year, existing.rows[0].id]
     );
     return existing.rows[0].id;
   }
 
-  const muid = generateMuid(user.name, user.yearOfBirth);
+  const muid = generateMuid(fullName, year);
   const res = await query(
-    `INSERT INTO users (muid, password_hash, name, email, mobile, address, year_of_birth, is_approved)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+    `INSERT INTO users (muid, password_hash, first_name, last_name, name, email, mobile, address, date_of_birth, year_of_birth, is_approved)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
      RETURNING id`,
-    [muid, passwordHash, user.name, email, user.mobile, user.address, user.yearOfBirth]
+    [muid, passwordHash, firstName, lastName, fullName, email, user.mobile, user.address, dobIso, year]
   );
   return res.rows[0].id;
 }

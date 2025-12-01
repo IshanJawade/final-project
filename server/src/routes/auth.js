@@ -3,24 +3,67 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { query } from '../db.js';
 import { generateMuid } from '../utils/muid.js';
+import { normalizeDateOfBirth } from '../utils/dates.js';
 import { JWT_SECRET } from '../config.js';
 
 const router = Router();
 
 router.post('/register/user', async (req, res) => {
-  const { name, yearOfBirth, email, mobile, address, password } = req.body;
-  if (!name || !yearOfBirth || !email || !password) {
+  const { firstName, lastName, dateOfBirth, email, mobile, address, password } = req.body;
+  if (!firstName || !lastName || !dateOfBirth || !email || !password) {
     return res.status(400).json({ message: 'Missing required fields' });
   }
 
+  let dobData;
   try {
-    const muid = generateMuid(name, yearOfBirth);
+    dobData = normalizeDateOfBirth(dateOfBirth);
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+
+  const { iso: dobIso, year } = dobData;
+  const trimmedFirst = firstName.trim();
+  const trimmedLast = lastName.trim();
+  const fullName = `${trimmedFirst} ${trimmedLast}`.trim();
+
+  if (!trimmedFirst) {
+    return res.status(400).json({ message: 'First name is required' });
+  }
+  if (!trimmedLast) {
+    return res.status(400).json({ message: 'Last name is required' });
+  }
+
+  try {
+    const muid = generateMuid(fullName, year);
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await query(
-      `INSERT INTO users (muid, password_hash, name, email, mobile, address, year_of_birth, is_approved)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)
-       RETURNING id, muid, email, is_approved`,
-      [muid, passwordHash, name, email.toLowerCase(), mobile || null, address || null, yearOfBirth]
+      `INSERT INTO users (
+          muid,
+          password_hash,
+          first_name,
+          last_name,
+          name,
+          email,
+          mobile,
+          address,
+          date_of_birth,
+          year_of_birth,
+          is_approved
+        )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE)
+       RETURNING id, muid, email, is_approved, first_name, last_name, date_of_birth`,
+      [
+        muid,
+        passwordHash,
+        trimmedFirst,
+        trimmedLast,
+        fullName,
+        email.toLowerCase(),
+        mobile || null,
+        address || null,
+        dobIso,
+        year,
+      ]
     );
 
     return res.status(201).json({
@@ -141,10 +184,19 @@ router.post('/login', async (req, res) => {
       },
     };
 
+    if (account.first_name || account.last_name) {
+      responsePayload.account.first_name = account.first_name;
+      responsePayload.account.last_name = account.last_name;
+    }
+    if (account.date_of_birth) {
+      responsePayload.account.date_of_birth = account.date_of_birth;
+    }
+
     try {
       if (resolvedRole === 'user') {
         await query('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [account.id]);
         responsePayload.account.muid = account.muid;
+        responsePayload.account.year_of_birth = account.year_of_birth;
       } else if (resolvedRole === 'medical') {
         await query('UPDATE medical_professionals SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [account.id]);
       } else if (resolvedRole === 'admin') {

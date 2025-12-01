@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiRequest } from '../api.js';
+import { formatDateMMDDYYYY } from '../utils/date.js';
 
 function getNavLinks(role) {
   switch (role) {
@@ -30,7 +31,20 @@ function getNavLinks(role) {
   }
 }
 
-function getInitials(name = '') {
+function getFullName(entity) {
+  if (!entity) {
+    return '';
+  }
+  const first = entity.first_name || entity.firstName || '';
+  const last = entity.last_name || entity.lastName || '';
+  const composed = `${first} ${last}`.trim();
+  if (composed) {
+    return composed;
+  }
+  return entity.name || '';
+}
+
+function getInitialsFromName(name = '') {
   const trimmed = name.trim();
   if (!trimmed) {
     return '?';
@@ -53,7 +67,7 @@ export default function Layout({ children }) {
   const [profileSummary, setProfileSummary] = useState(null);
 
   const navLinks = useMemo(() => (token ? getNavLinks(role) : []), [token, role]);
-  const initials = useMemo(() => getInitials(account?.name), [account]);
+  const initials = useMemo(() => getInitialsFromName(getFullName(account)), [account]);
 
   useEffect(() => {
     if (!token) {
@@ -102,15 +116,10 @@ export default function Layout({ children }) {
   }, [token, role]);
 
   const summary = profileSummary || account || null;
-  const displayName = summary?.name || 'Account';
+  const displayName = getFullName(summary) || summary?.name || 'Account';
   const displayMuid = summary?.muid && String(summary.muid).trim().length > 0 ? summary.muid : '—';
-  const rawDob =
-    summary?.dateOfBirth ??
-    summary?.date_of_birth ??
-    summary?.year_of_birth ??
-    summary?.yearOfBirth ??
-    null;
-  const displayDob = rawDob === null || rawDob === undefined || String(rawDob).trim() === '' ? '—' : String(rawDob);
+  const rawDob = summary?.dateOfBirth ?? summary?.date_of_birth ?? null;
+  const displayDob = rawDob ? formatDateMMDDYYYY(rawDob) : '—';
 
   return (
     <div className="app-shell">

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useAdminDirectory } from '../utils/useAdminDirectory.js';
+import { formatDateMMDDYYYY } from '../utils/date.js';
 
 function StatCard({ title, value, subtext }) {
   return (
@@ -87,64 +88,6 @@ export default function AdminDashboard() {
                 subtext={card.subtext}
               />
             ))}
-          </div>
-        )}
-      </div>
-
-      <div className="panel">
-        <h2>Registered Users</h2>
-        {users.length === 0 ? (
-          <p className="muted">No approved users yet.</p>
-        ) : (
-          <div className="table-wrapper">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>MUID</th>
-                  <th>Birth Year</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td>{user.name}</td>
-                    <td>{user.email}</td>
-                    <td>{user.muid || '—'}</td>
-                    <td>{user.year_of_birth || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="panel">
-        <h2>Medical Professionals</h2>
-        {professionals.length === 0 ? (
-          <p className="muted">No approved medical professionals yet.</p>
-        ) : (
-          <div className="table-wrapper">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Company</th>
-                </tr>
-              </thead>
-              <tbody>
-                {professionals.map((pro) => (
-                  <tr key={pro.id}>
-                    <td>{pro.name}</td>
-                    <td>{pro.email}</td>
-                    <td>{pro.company || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { requireUser } from '../middleware/auth.js';
 import { query } from '../db.js';
+import { normalizeDateOfBirth } from '../utils/dates.js';
 
 const router = Router();
 router.use(requireUser);
@@ -50,7 +51,7 @@ router.get('/dashboard', async (req, res) => {
 router.get('/me', async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, muid, name, email, mobile, address, year_of_birth, is_approved, created_at, updated_at
+      `SELECT id, muid, first_name, last_name, name, email, mobile, address, date_of_birth, year_of_birth, is_approved, created_at, updated_at
        FROM users WHERE id = $1`,
       [req.auth.id]
     );
@@ -65,18 +66,54 @@ router.get('/me', async (req, res) => {
 });
 
 router.put('/me', async (req, res) => {
-  const { name, email, mobile, address } = req.body;
-  if (!name || !email) {
-    return res.status(400).json({ message: 'Name and email are required' });
+  const { firstName, lastName, email, mobile, address, dateOfBirth } = req.body;
+  if (!firstName || !lastName || !email || !dateOfBirth) {
+    return res.status(400).json({ message: 'First name, last name, email, and date of birth are required' });
   }
+
+  let dobData;
+  try {
+    dobData = normalizeDateOfBirth(dateOfBirth);
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+
+  const trimmedFirst = firstName.trim();
+  const trimmedLast = lastName.trim();
+  if (!trimmedFirst) {
+    return res.status(400).json({ message: 'First name is required' });
+  }
+  if (!trimmedLast) {
+    return res.status(400).json({ message: 'Last name is required' });
+  }
+
+  const fullName = `${trimmedFirst} ${trimmedLast}`.trim();
 
   try {
     const result = await query(
       `UPDATE users
-       SET name = $1, email = $2, mobile = $3, address = $4, updated_at = NOW()
-       WHERE id = $5
-       RETURNING id, muid, name, email, mobile, address, year_of_birth, is_approved, created_at, updated_at`,
-      [name, email.toLowerCase(), mobile || null, address || null, req.auth.id]
+         SET first_name = $1,
+           last_name = $2,
+           name = $3,
+           email = $4,
+           mobile = $5,
+           address = $6,
+           date_of_birth = $7,
+           year_of_birth = $8,
+           updated_at = NOW()
+         WHERE id = $9
+       RETURNING id, muid, first_name, last_name, name, email, mobile, address, date_of_birth, year_of_birth, is_approved, created_at, updated_at`,
+      [
+        trimmedFirst,
+        trimmedLast,
+        fullName,
+        email.toLowerCase(),
+        mobile || null,
+        address || null,
+        dobData.iso,
+        dobData.year,
+        req.auth.id,
+      ]
     );
     return res.json({ message: 'Profile updated', user: result.rows[0] });
   } catch (err) {

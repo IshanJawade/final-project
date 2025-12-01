@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { apiRequest } from '../api.js';
+import { formatDateMMDDYYYY } from '../utils/date.js';
 
 const initialState = {
-  name: '',
-  yearOfBirth: '',
+  firstName: '',
+  lastName: '',
+  dateOfBirth: '',
   email: '',
   mobile: '',
   address: '',
@@ -16,6 +18,8 @@ export default function RegisterUserPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const maxDob = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
   const handleChange = (evt) => {
     const { name, value } = evt.target;
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -27,12 +31,13 @@ export default function RegisterUserPage() {
     setError('');
     setSuccess('');
     try {
+      const payload = {
+        ...form,
+        dateOfBirth: formatDateMMDDYYYY(form.dateOfBirth),
+      };
       await apiRequest('/api/auth/register/user', {
         method: 'POST',
-        body: {
-          ...form,
-          yearOfBirth: Number(form.yearOfBirth),
-        },
+        body: payload,
       });
       setSuccess('Registration submitted. An admin will review your account.');
       setForm(initialState);
@@ -50,19 +55,22 @@ export default function RegisterUserPage() {
       {success && <div className="alert alert-success">{success}</div>}
       <form className="form-grid form-stack" onSubmit={handleSubmit}>
         <label>
-          Full Name
-          <input name="name" value={form.name} onChange={handleChange} required />
+          First Name
+          <input name="firstName" value={form.firstName} onChange={handleChange} required />
         </label>
         <label>
-          Year of Birth
+          Last Name
+          <input name="lastName" value={form.lastName} onChange={handleChange} required />
+        </label>
+        <label>
+          Date of Birth
           <input
-            name="yearOfBirth"
-            value={form.yearOfBirth}
+            type="date"
+            name="dateOfBirth"
+            value={form.dateOfBirth}
             onChange={handleChange}
-            type="number"
+            max={maxDob}
             required
-            min="1900"
-            max="2025"
           />
         </label>
         <label>
