@@ -4,6 +4,11 @@ import { pool, query } from '../src/db.js';
 import { generateMuid } from '../src/utils/muid.js';
 import { encryptJson } from '../src/utils/encryption.js';
 import { normalizeDateOfBirth } from '../src/utils/dates.js';
+import {
+  buildAdminSecrets,
+  buildProfessionalSecrets,
+  buildUserSecrets,
+} from '../src/utils/sensitive.js';
 
 const admins = [
   {
@@ -68,67 +73,85 @@ const professionals = [
 
 async function upsertAdmin(admin) {
   const passwordHash = await bcrypt.hash(admin.password, 10);
-  const existing = await query('SELECT id FROM admins WHERE username = $1', [admin.username]);
+  const normalizedEmail = admin.email.trim().toLowerCase();
+  const secrets = buildAdminSecrets({
+    name: admin.name,
+    email: normalizedEmail,
+    mobile: admin.mobile,
+    address: admin.address,
+  });
+  const username = admin.username.toLowerCase();
+  const existing = await query('SELECT id FROM admins WHERE username = $1', [username]);
   if (existing.rowCount > 0) {
     await query(
       `UPDATE admins
-       SET password_hash = $1, name = $2, email = $3, mobile = $4, address = $5, updated_at = NOW()
-       WHERE id = $6`,
-      [passwordHash, admin.name, admin.email.toLowerCase(), admin.mobile, admin.address, existing.rows[0].id]
+          SET password_hash = $1,
+              email_hash = $2,
+              email_encrypted = $3,
+              profile_encrypted = $4,
+              updated_at = NOW()
+        WHERE id = $5`,
+      [passwordHash, secrets.emailHash, secrets.emailEncrypted, secrets.profileEncrypted, existing.rows[0].id]
     );
     return existing.rows[0].id;
   }
 
   const res = await query(
-    `INSERT INTO admins (username, password_hash, name, email, mobile, address)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO admins (username, password_hash, email_hash, email_encrypted, profile_encrypted)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id`,
-    [
-      admin.username.toLowerCase(),
-      passwordHash,
-      admin.name,
-      admin.email.toLowerCase(),
-      admin.mobile,
-      admin.address,
-    ]
+    [username, passwordHash, secrets.emailHash, secrets.emailEncrypted, secrets.profileEncrypted]
   );
   return res.rows[0].id;
 }
 
 async function upsertUser(user) {
-  const email = user.email.toLowerCase();
-  const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
   const passwordHash = await bcrypt.hash(user.password, 10);
   const { iso: dobIso, year } = normalizeDateOfBirth(user.dateOfBirth);
   const firstName = user.firstName.trim();
   const lastName = user.lastName.trim();
   const fullName = `${firstName} ${lastName}`.trim();
+  const normalizedEmail = user.email.trim().toLowerCase();
+  const secrets = buildUserSecrets({
+    firstName,
+    lastName,
+    email: normalizedEmail,
+    mobile: user.mobile,
+    address: user.address,
+    dateOfBirth: dobIso,
+    yearOfBirth: year,
+  });
+  const existing = await query('SELECT id FROM users WHERE email_hash = $1', [secrets.emailHash]);
 
   if (existing.rowCount > 0) {
     await query(
       `UPDATE users
-       SET password_hash = $1,
-           first_name = $2,
-           last_name = $3,
-           name = $4,
-           mobile = $5,
-           address = $6,
-           date_of_birth = $7,
-           year_of_birth = $8,
-           is_approved = TRUE,
-           updated_at = NOW()
-       WHERE id = $9`,
-      [passwordHash, firstName, lastName, fullName, user.mobile, user.address, dobIso, year, existing.rows[0].id]
+          SET password_hash = $1,
+              email_hash = $2,
+              email_encrypted = $3,
+              profile_encrypted = $4,
+              year_of_birth = $5,
+              is_approved = TRUE,
+              updated_at = NOW()
+        WHERE id = $6`,
+      [
+        passwordHash,
+        secrets.emailHash,
+        secrets.emailEncrypted,
+        secrets.profileEncrypted,
+        year,
+        existing.rows[0].id,
+      ]
     );
     return existing.rows[0].id;
   }
 
   const muid = generateMuid(fullName, year);
   const res = await query(
-    `INSERT INTO users (muid, password_hash, first_name, last_name, name, email, mobile, address, date_of_birth, year_of_birth, is_approved)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
+    `INSERT INTO users (muid, password_hash, year_of_birth, email_hash, email_encrypted, profile_encrypted, is_approved)
+     VALUES ($1, $2, $3, $4, $5, $6, TRUE)
      RETURNING id`,
-    [muid, passwordHash, firstName, lastName, fullName, email, user.mobile, user.address, dobIso, year]
+    [muid, passwordHash, year, secrets.emailHash, secrets.emailEncrypted, secrets.profileEncrypted]
   );
   return res.rows[0].id;
 }
@@ -137,39 +160,35 @@ async function upsertProfessional(pro) {
   const username = pro.username.toLowerCase();
   const existing = await query('SELECT id FROM medical_professionals WHERE username = $1', [username]);
   const passwordHash = await bcrypt.hash(pro.password, 10);
+  const normalizedEmail = pro.email.trim().toLowerCase();
+  const secrets = buildProfessionalSecrets({
+    name: pro.name,
+    email: normalizedEmail,
+    mobile: pro.mobile,
+    address: pro.address,
+    company: pro.company,
+  });
 
   if (existing.rowCount > 0) {
     await query(
       `UPDATE medical_professionals
-       SET password_hash = $1, name = $2, email = $3, mobile = $4, address = $5, company = $6,
-           is_approved = TRUE, updated_at = NOW()
-       WHERE id = $7`,
-      [
-        passwordHash,
-        pro.name,
-        pro.email.toLowerCase(),
-        pro.mobile,
-        pro.address,
-        pro.company,
-        existing.rows[0].id,
-      ]
+          SET password_hash = $1,
+              email_hash = $2,
+              email_encrypted = $3,
+              profile_encrypted = $4,
+              is_approved = TRUE,
+              updated_at = NOW()
+        WHERE id = $5`,
+      [passwordHash, secrets.emailHash, secrets.emailEncrypted, secrets.profileEncrypted, existing.rows[0].id]
     );
     return existing.rows[0].id;
   }
 
   const res = await query(
-    `INSERT INTO medical_professionals (username, password_hash, name, email, mobile, address, company, is_approved)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+    `INSERT INTO medical_professionals (username, password_hash, email_hash, email_encrypted, profile_encrypted, is_approved)
+     VALUES ($1, $2, $3, $4, $5, TRUE)
      RETURNING id`,
-    [
-      username,
-      passwordHash,
-      pro.name,
-      pro.email.toLowerCase(),
-      pro.mobile,
-      pro.address,
-      pro.company,
-    ]
+    [username, passwordHash, secrets.emailHash, secrets.emailEncrypted, secrets.profileEncrypted]
   );
   return res.rows[0].id;
 }

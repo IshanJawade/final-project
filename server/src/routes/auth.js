@@ -5,6 +5,14 @@ import { query } from '../db.js';
 import { generateMuid } from '../utils/muid.js';
 import { normalizeDateOfBirth } from '../utils/dates.js';
 import { JWT_SECRET } from '../config.js';
+import {
+  buildUserSecrets,
+  buildProfessionalSecrets,
+  hydrateUser,
+  hydrateProfessional,
+  hydrateAdmin,
+  hashIdentifier,
+} from '../utils/sensitive.js';
 
 const router = Router();
 
@@ -36,43 +44,46 @@ router.post('/register/user', async (req, res) => {
   try {
     const muid = generateMuid(fullName, year);
     const passwordHash = await bcrypt.hash(password, 10);
+    const normalizedEmail = email.trim().toLowerCase();
+    const secrets = buildUserSecrets({
+      firstName: trimmedFirst,
+      lastName: trimmedLast,
+      email: normalizedEmail,
+      mobile,
+      address,
+      dateOfBirth: dobIso,
+      yearOfBirth: year,
+    });
+
+    if (!secrets.emailHash) {
+      return res.status(400).json({ message: 'Valid email address is required' });
+    }
+
     const result = await query(
       `INSERT INTO users (
           muid,
           password_hash,
-          first_name,
-          last_name,
-          name,
-          email,
-          mobile,
-          address,
-          date_of_birth,
           year_of_birth,
-          is_approved
+          is_approved,
+          email_hash,
+          email_encrypted,
+          profile_encrypted
         )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE)
-       RETURNING id, muid, email, is_approved, first_name, last_name, date_of_birth`,
-      [
-        muid,
-        passwordHash,
-        trimmedFirst,
-        trimmedLast,
-        fullName,
-        email.toLowerCase(),
-        mobile || null,
-        address || null,
-        dobIso,
-        year,
-      ]
+       VALUES ($1, $2, $3, FALSE, $4, $5, $6)
+       RETURNING id, muid, year_of_birth, is_approved, email_hash, email_encrypted, profile_encrypted, created_at, updated_at`,
+      [muid, passwordHash, year, secrets.emailHash, secrets.emailEncrypted, secrets.profileEncrypted]
     );
 
     return res.status(201).json({
       message: 'Registration submitted. Await admin approval.',
-      user: result.rows[0],
+      user: hydrateUser(result.rows[0]),
     });
   } catch (err) {
-    if (err.code === '23505') {
+    if (err.constraint === 'users_email_hash_key') {
       return res.status(409).json({ message: 'Email already registered' });
+    }
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'Duplicate account detected' });
     }
     console.error('User registration failed', err);
     return res.status(500).json({ message: 'Registration failed' });
@@ -87,28 +98,36 @@ router.post('/register/medical-professional', async (req, res) => {
 
   try {
     const passwordHash = await bcrypt.hash(password, 10);
+    const normalizedEmail = email.trim().toLowerCase();
+    const secrets = buildProfessionalSecrets({
+      name,
+      email: normalizedEmail,
+      mobile,
+      address,
+      company,
+    });
+
+    if (!secrets.emailHash) {
+      return res.status(400).json({ message: 'Valid email address is required' });
+    }
+
     const result = await query(
-      `INSERT INTO medical_professionals (username, password_hash, name, email, mobile, address, company, is_approved)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)
-       RETURNING id, username, email, is_approved`,
-      [
-        username.toLowerCase(),
-        passwordHash,
-        name,
-        email.toLowerCase(),
-        mobile || null,
-        address || null,
-        company || null,
-      ]
+      `INSERT INTO medical_professionals (username, password_hash, is_approved, email_hash, email_encrypted, profile_encrypted)
+       VALUES ($1, $2, FALSE, $3, $4, $5)
+       RETURNING id, username, is_approved, email_hash, email_encrypted, profile_encrypted, created_at, updated_at`,
+      [username.toLowerCase(), passwordHash, secrets.emailHash, secrets.emailEncrypted, secrets.profileEncrypted]
     );
 
     return res.status(201).json({
       message: 'Registration submitted. Await admin approval.',
-      medicalProfessional: result.rows[0],
+      medicalProfessional: hydrateProfessional(result.rows[0]),
     });
   } catch (err) {
+    if (err.constraint === 'medical_professionals_email_hash_key') {
+      return res.status(409).json({ message: 'Email already registered' });
+    }
     if (err.code === '23505') {
-      return res.status(409).json({ message: 'Username or email already registered' });
+      return res.status(409).json({ message: 'Username already registered' });
     }
     console.error('Medical professional registration failed', err);
     return res.status(500).json({ message: 'Registration failed' });
@@ -116,10 +135,16 @@ router.post('/register/medical-professional', async (req, res) => {
 });
 
 async function findAccount(identifierRaw, roleHint) {
-  const identifier = identifierRaw.toLowerCase();
+  const identifier = identifierRaw.trim().toLowerCase();
+  const identifierHash = hashIdentifier(identifier);
 
   if (!roleHint || roleHint === 'user') {
-    const userRes = await query('SELECT * FROM users WHERE email = $1', [identifier]);
+    const userRes = await query(
+      `SELECT id, muid, password_hash, year_of_birth, is_approved, email_hash, email_encrypted, profile_encrypted, created_at, updated_at
+         FROM users
+        WHERE email_hash = $1`,
+      [identifierHash]
+    );
     if (userRes.rowCount) {
       return { account: userRes.rows[0], role: 'user', identifierField: 'email' };
     }
@@ -127,8 +152,10 @@ async function findAccount(identifierRaw, roleHint) {
 
   if (!roleHint || roleHint === 'medical') {
     const medRes = await query(
-      'SELECT * FROM medical_professionals WHERE username = $1 OR email = $1',
-      [identifier]
+      `SELECT id, username, password_hash, is_approved, email_hash, email_encrypted, profile_encrypted, created_at, updated_at, last_login_at
+         FROM medical_professionals
+        WHERE username = $1 OR email_hash = $2`,
+      [identifier, identifierHash]
     );
     if (medRes.rowCount) {
       return { account: medRes.rows[0], role: 'medical', identifierField: 'username/email' };
@@ -136,7 +163,12 @@ async function findAccount(identifierRaw, roleHint) {
   }
 
   if (!roleHint || roleHint === 'admin') {
-    const adminRes = await query('SELECT * FROM admins WHERE username = $1 OR email = $1', [identifier]);
+    const adminRes = await query(
+      `SELECT id, username, password_hash, email_hash, email_encrypted, profile_encrypted, created_at, updated_at
+         FROM admins
+        WHERE username = $1 OR email_hash = $2`,
+      [identifier, identifierHash]
+    );
     if (adminRes.rowCount) {
       return { account: adminRes.rows[0], role: 'admin', identifierField: 'username/email' };
     }
@@ -174,39 +206,35 @@ router.post('/login', async (req, res) => {
       expiresIn: '12h',
     });
 
-    const responsePayload = {
-      token,
-      role: resolvedRole,
-      account: {
-        id: account.id,
-        name: account.name,
-        email: account.email,
-      },
-    };
-
-    if (account.first_name || account.last_name) {
-      responsePayload.account.first_name = account.first_name;
-      responsePayload.account.last_name = account.last_name;
-    }
-    if (account.date_of_birth) {
-      responsePayload.account.date_of_birth = account.date_of_birth;
-    }
+    let accountPayload;
 
     try {
       if (resolvedRole === 'user') {
         await query('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [account.id]);
-        responsePayload.account.muid = account.muid;
-        responsePayload.account.year_of_birth = account.year_of_birth;
+        accountPayload = hydrateUser(account);
       } else if (resolvedRole === 'medical') {
         await query('UPDATE medical_professionals SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [account.id]);
+        accountPayload = hydrateProfessional(account);
       } else if (resolvedRole === 'admin') {
         await query('UPDATE admins SET updated_at = NOW() WHERE id = $1', [account.id]);
+        accountPayload = hydrateAdmin(account);
       }
     } catch (recordErr) {
       console.error('Failed to record login activity', recordErr);
+      if (resolvedRole === 'user') {
+        accountPayload = hydrateUser(account);
+      } else if (resolvedRole === 'medical') {
+        accountPayload = hydrateProfessional(account);
+      } else {
+        accountPayload = hydrateAdmin(account);
+      }
     }
 
-    return res.json(responsePayload);
+    return res.json({
+      token,
+      role: resolvedRole,
+      account: accountPayload,
+    });
   } catch (err) {
     console.error('Login failed', err);
     return res.status(500).json({ message: 'Login failed' });

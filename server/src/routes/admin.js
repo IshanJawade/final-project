@@ -2,6 +2,12 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { requireAdmin } from '../middleware/auth.js';
 import { query } from '../db.js';
+import {
+  buildAdminSecrets,
+  hydrateAdmin,
+  hydrateProfessional,
+  hydrateUser,
+} from '../utils/sensitive.js';
 
 const router = Router();
 router.use(requireAdmin);
@@ -85,30 +91,30 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-router.get('/users', async (req, res) => {
+router.get('/users', async (_req, res) => {
   try {
     const result = await query(
-      `SELECT id, first_name, last_name, name, email, muid, date_of_birth, year_of_birth
+      `SELECT id, muid, year_of_birth, is_approved, profile_encrypted, email_encrypted, email_hash, created_at, updated_at
          FROM users
         WHERE is_approved = TRUE
         ORDER BY created_at DESC`
     );
-    return res.json({ users: result.rows });
+    return res.json({ users: result.rows.map(hydrateUser).filter(Boolean) });
   } catch (err) {
     console.error('Failed to load users list', err);
     return res.status(500).json({ message: 'Failed to load users' });
   }
 });
 
-router.get('/professionals', async (req, res) => {
+router.get('/professionals', async (_req, res) => {
   try {
     const result = await query(
-      `SELECT id, name, email, company
+      `SELECT id, username, is_approved, profile_encrypted, email_encrypted, email_hash, created_at, updated_at, last_login_at
          FROM medical_professionals
         WHERE is_approved = TRUE
         ORDER BY created_at DESC`
     );
-    return res.json({ medicalProfessionals: result.rows });
+    return res.json({ medicalProfessionals: result.rows.map(hydrateProfessional).filter(Boolean) });
   } catch (err) {
     console.error('Failed to load professionals list', err);
     return res.status(500).json({ message: 'Failed to load professionals' });
@@ -119,15 +125,15 @@ router.get('/me', async (req, res) => {
   try {
     const adminId = req.auth?.id;
     const result = await query(
-      `SELECT id, username, name, email, mobile, address, created_at, updated_at
-       FROM admins
-       WHERE id = $1`,
+      `SELECT id, username, profile_encrypted, email_encrypted, email_hash, created_at, updated_at
+         FROM admins
+        WHERE id = $1`,
       [adminId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Admin not found' });
     }
-    return res.json({ admin: result.rows[0] });
+    return res.json({ admin: hydrateAdmin(result.rows[0]) });
   } catch (err) {
     console.error('Failed to load admin profile', err);
     return res.status(500).json({ message: 'Failed to load admin profile' });
@@ -141,20 +147,30 @@ router.put('/me', async (req, res) => {
     return res.status(400).json({ message: 'Name and email are required' });
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const secrets = buildAdminSecrets({ name, email: normalizedEmail, mobile, address });
+
+  if (!secrets.emailHash) {
+    return res.status(400).json({ message: 'Valid email address is required' });
+  }
+
   try {
     const result = await query(
       `UPDATE admins
-       SET name = $1, email = $2, mobile = $3, address = $4, updated_at = NOW()
-       WHERE id = $5
-       RETURNING id, username, name, email, mobile, address, updated_at`,
-      [name, email.toLowerCase(), mobile || null, address || null, adminId]
+          SET email_hash = $1,
+              email_encrypted = $2,
+              profile_encrypted = $3,
+              updated_at = NOW()
+        WHERE id = $4
+      RETURNING id, username, profile_encrypted, email_encrypted, email_hash, created_at, updated_at`,
+      [secrets.emailHash, secrets.emailEncrypted, secrets.profileEncrypted, adminId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Admin not found' });
     }
-    return res.json({ message: 'Profile updated', admin: result.rows[0] });
+    return res.json({ message: 'Profile updated', admin: hydrateAdmin(result.rows[0]) });
   } catch (err) {
-    if (err.code === '23505') {
+    if (err.constraint === 'admins_email_hash_key' || err.code === '23505') {
       return res.status(400).json({ message: 'Email already in use' });
     }
     console.error('Failed to update admin profile', err);
@@ -191,15 +207,15 @@ router.put('/me/password', async (req, res) => {
   }
 });
 
-router.get('/pending-users', async (req, res) => {
+router.get('/pending-users', async (_req, res) => {
   try {
     const result = await query(
-      `SELECT id, first_name, last_name, name, email, mobile, address, date_of_birth, year_of_birth, muid, created_at
-       FROM users
-       WHERE is_approved = FALSE
-       ORDER BY created_at`
+      `SELECT id, muid, year_of_birth, is_approved, profile_encrypted, email_encrypted, email_hash, created_at, updated_at
+         FROM users
+        WHERE is_approved = FALSE
+        ORDER BY created_at`
     );
-    return res.json({ users: result.rows });
+    return res.json({ users: result.rows.map(hydrateUser).filter(Boolean) });
   } catch (err) {
     console.error('Failed to load pending users', err);
     return res.status(500).json({ message: 'Failed to load pending users' });
@@ -214,30 +230,32 @@ router.post('/users/:id/approve', async (req, res) => {
 
   try {
     const result = await query(
-      `UPDATE users SET is_approved = TRUE, updated_at = NOW()
-       WHERE id = $1
-       RETURNING id, first_name, last_name, name, email, muid, date_of_birth, year_of_birth, is_approved`,
+      `UPDATE users
+          SET is_approved = TRUE,
+              updated_at = NOW()
+        WHERE id = $1
+      RETURNING id, muid, year_of_birth, is_approved, profile_encrypted, email_encrypted, email_hash, created_at, updated_at`,
       [userId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
-    return res.json({ message: 'User approved', user: result.rows[0] });
+    return res.json({ message: 'User approved', user: hydrateUser(result.rows[0]) });
   } catch (err) {
     console.error('Failed to approve user', err);
     return res.status(500).json({ message: 'Failed to approve user' });
   }
 });
 
-router.get('/pending-professionals', async (req, res) => {
+router.get('/pending-professionals', async (_req, res) => {
   try {
     const result = await query(
-      `SELECT id, username, name, email, mobile, company, created_at
-       FROM medical_professionals
-       WHERE is_approved = FALSE
-       ORDER BY created_at`
+      `SELECT id, username, is_approved, profile_encrypted, email_encrypted, email_hash, created_at, updated_at, last_login_at
+         FROM medical_professionals
+        WHERE is_approved = FALSE
+        ORDER BY created_at`
     );
-    return res.json({ medicalProfessionals: result.rows });
+    return res.json({ medicalProfessionals: result.rows.map(hydrateProfessional).filter(Boolean) });
   } catch (err) {
     console.error('Failed to load pending professionals', err);
     return res.status(500).json({ message: 'Failed to load pending professionals' });
@@ -252,15 +270,20 @@ router.post('/professionals/:id/approve', async (req, res) => {
 
   try {
     const result = await query(
-      `UPDATE medical_professionals SET is_approved = TRUE, updated_at = NOW()
-       WHERE id = $1
-       RETURNING id, username, name, email, is_approved`,
+      `UPDATE medical_professionals
+          SET is_approved = TRUE,
+              updated_at = NOW()
+        WHERE id = $1
+      RETURNING id, username, is_approved, profile_encrypted, email_encrypted, email_hash, created_at, updated_at, last_login_at`,
       [professionalId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Medical professional not found' });
     }
-    return res.json({ message: 'Medical professional approved', professional: result.rows[0] });
+    return res.json({
+      message: 'Medical professional approved',
+      professional: hydrateProfessional(result.rows[0]),
+    });
   } catch (err) {
     console.error('Failed to approve professional', err);
     return res.status(500).json({ message: 'Failed to approve professional' });
