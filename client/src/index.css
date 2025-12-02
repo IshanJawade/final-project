@@ -594,6 +594,78 @@ button:hover {
   text-decoration: underline;
 }
 
+.text-single-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-two-lines {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.record-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.record-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.record-title strong {
+  line-height: 1.3;
+}
+
+.record-creator {
+  color: var(--text-muted);
+  font-size: 13px;
+  letter-spacing: 0.4px;
+}
+
+.record-date {
+  color: var(--text-muted);
+  font-size: 13px;
+  min-width: 160px;
+  text-align: right;
+}
+
+.record-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.record-file-item {
+  flex: 1 1 calc((100% - 24px) / 3);
+  max-width: calc((100% - 24px) / 3);
+  min-width: 140px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .record-file-item {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .record-date {
+    min-width: auto;
+    text-align: left;
+  }
+}
+
 .home-actions {
   display: flex;
   flex-wrap: wrap;

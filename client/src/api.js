@@ -1,7 +1,8 @@
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 export async function apiRequest(path, { method = 'GET', token, body } = {}) {
-  const headers = { 'Content-Type': 'application/json' };
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -9,7 +10,7 @@ export async function apiRequest(path, { method = 'GET', token, body } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
   });
 
   const contentType = response.headers.get('Content-Type') || '';

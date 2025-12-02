@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import multer from 'multer';
 import { requireMedicalProfessional } from '../middleware/auth.js';
 import { query } from '../db.js';
-import { decryptJson, encryptJson } from '../utils/encryption.js';
+import { decryptJson, encryptJson, encryptBuffer, decryptBuffer } from '../utils/encryption.js';
 import {
   buildProfessionalSecrets,
   hydrateProfessional,
@@ -11,6 +12,14 @@ import {
 
 const router = Router();
 router.use(requireMedicalProfessional);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10 MB per file
+    files: 5,
+  },
+});
 
 router.get('/me', async (req, res) => {
   try {
@@ -216,18 +225,75 @@ router.get('/patients/:userId/records', async (req, res) => {
     }
 
     const recordsRes = await query(
-      `SELECT id, medical_professional_id, data_encrypted, created_at, updated_at
-       FROM records WHERE user_id = $1 ORDER BY created_at DESC`,
+      `SELECT r.id,
+              r.medical_professional_id,
+              r.data_encrypted,
+              r.created_at,
+              r.updated_at,
+              mp.profile_encrypted AS professional_profile,
+              mp.email_encrypted AS professional_email
+         FROM records r
+         LEFT JOIN medical_professionals mp ON mp.id = r.medical_professional_id
+        WHERE r.user_id = $1
+        ORDER BY r.created_at DESC`,
       [userId]
     );
 
-    const records = recordsRes.rows.map((row) => ({
-      id: row.id,
-      medical_professional_id: row.medical_professional_id,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      data: decryptJson(row.data_encrypted),
-    }));
+    const recordIds = recordsRes.rows.map((row) => row.id);
+
+    let attachments = [];
+    if (recordIds.length > 0) {
+      const filesRes = await query(
+        `SELECT id,
+                record_id,
+                medical_professional_id,
+                file_name,
+                mime_type,
+                file_size,
+                created_at
+           FROM record_files
+          WHERE record_id = ANY($1::int[])
+          ORDER BY created_at ASC`,
+        [recordIds]
+      );
+      attachments = filesRes.rows;
+    }
+
+    const attachmentsByRecord = attachments.reduce((acc, file) => {
+      if (!acc[file.record_id]) {
+        acc[file.record_id] = [];
+      }
+      acc[file.record_id].push({
+        id: file.id,
+        file_name: file.file_name,
+        mime_type: file.mime_type,
+        file_size: file.file_size,
+        created_at: file.created_at,
+        medical_professional_id: file.medical_professional_id,
+        download_url: `/api/medical/records/${file.record_id}/files/${file.id}/download`,
+      });
+      return acc;
+    }, {});
+
+    const records = recordsRes.rows.map((row) => {
+      const uploader = row.medical_professional_id
+        ? hydrateProfessional({
+            id: row.medical_professional_id,
+            profile_encrypted: row.professional_profile,
+            email_encrypted: row.professional_email,
+          })
+        : null;
+
+      return {
+        id: row.id,
+        medical_professional_id: row.medical_professional_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        data: decryptJson(row.data_encrypted),
+        uploaded_by: uploader,
+        files: attachmentsByRecord[row.id] || [],
+      };
+    });
 
     return res.json({ records });
   } catch (err) {
@@ -236,14 +302,10 @@ router.get('/patients/:userId/records', async (req, res) => {
   }
 });
 
-router.post('/patients/:userId/records', async (req, res) => {
+router.post('/patients/:userId/records', upload.array('files', 5), async (req, res) => {
   const userId = Number(req.params.userId);
   if (!Number.isInteger(userId)) {
     return res.status(400).json({ message: 'Invalid user id' });
-  }
-  const { data } = req.body;
-  if (!data) {
-    return res.status(400).json({ message: 'Record data is required' });
   }
 
   try {
@@ -257,7 +319,21 @@ router.post('/patients/:userId/records', async (req, res) => {
       return res.status(403).json({ message: 'No active access for this user' });
     }
 
-    const encrypted = encryptJson(data);
+    let payload;
+    if (req.body.data) {
+      try {
+        payload = JSON.parse(req.body.data);
+      } catch (err) {
+        return res.status(400).json({ message: 'Invalid record payload' });
+      }
+    } else {
+      payload = {
+        summary: req.body.summary || '',
+        notes: req.body.notes || '',
+      };
+    }
+
+    const encrypted = encryptJson(payload);
     const result = await query(
       `INSERT INTO records (user_id, medical_professional_id, data_encrypted)
        VALUES ($1, $2, $3)
@@ -265,11 +341,33 @@ router.post('/patients/:userId/records', async (req, res) => {
       [userId, req.auth.id, encrypted]
     );
 
+    const attachments = [];
+    if (Array.isArray(req.files) && req.files.length > 0) {
+      for (const file of req.files) {
+        if (!file || !file.buffer || file.size === 0) {
+          continue;
+        }
+
+        const encryptedBlob = encryptBuffer(file.buffer);
+        const fileRes = await query(
+          `INSERT INTO record_files (record_id, medical_professional_id, file_name, mime_type, file_size, file_encrypted)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, file_name, mime_type, file_size, created_at`,
+          [result.rows[0].id, req.auth.id, file.originalname, file.mimetype, file.size, encryptedBlob]
+        );
+        attachments.push({
+          ...fileRes.rows[0],
+          download_url: `/api/medical/records/${result.rows[0].id}/files/${fileRes.rows[0].id}/download`,
+        });
+      }
+    }
+
     return res.status(201).json({
       message: 'Record created',
       record: {
         ...result.rows[0],
-        data,
+        data: payload,
+        files: attachments,
       },
     });
   } catch (err) {
@@ -445,6 +543,61 @@ router.get('/access/requests', async (req, res) => {
   } catch (err) {
     console.error('Failed to load access requests', err);
     return res.status(500).json({ message: 'Failed to load access requests' });
+  }
+});
+
+router.get('/records/:recordId/files/:fileId/download', async (req, res) => {
+  const recordId = Number(req.params.recordId);
+  const fileId = Number(req.params.fileId);
+
+  if (!Number.isInteger(recordId) || !Number.isInteger(fileId)) {
+    return res.status(400).json({ message: 'Invalid identifiers' });
+  }
+
+  try {
+    const recordRes = await query('SELECT user_id, medical_professional_id FROM records WHERE id = $1', [
+      recordId,
+    ]);
+    if (recordRes.rowCount === 0) {
+      return res.status(404).json({ message: 'Record not found' });
+    }
+
+    const record = recordRes.rows[0];
+    if (record.medical_professional_id !== req.auth.id) {
+      const accessRes = await query(
+        `SELECT id FROM access
+         WHERE user_id = $1
+           AND medical_professional_id = $2
+           AND access_revoked_at IS NULL
+           AND (access_expires_at IS NULL OR access_expires_at > NOW())`,
+        [record.user_id, req.auth.id]
+      );
+      if (accessRes.rowCount === 0) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
+    const fileRes = await query(
+      `SELECT file_name, mime_type, file_encrypted
+         FROM record_files
+        WHERE id = $1 AND record_id = $2`,
+      [fileId, recordId]
+    );
+
+    if (fileRes.rowCount === 0) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    const fileRow = fileRes.rows[0];
+    const fileBuffer = decryptBuffer(fileRow.file_encrypted);
+
+    res.setHeader('Content-Type', fileRow.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Length', fileBuffer.length);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURI(fileRow.file_name)}"`);
+    return res.send(fileBuffer);
+  } catch (err) {
+    console.error('Failed to download record file', err);
+    return res.status(500).json({ message: 'Failed to download file' });
   }
 });
 

@@ -35,8 +35,19 @@ Models:
         userId; (foreign key referencing User)
         medicalProfessionalId; (foreign key referencing MedicalProfessional who created the record)
         data; (encrypted medical data)
+        files; (list of encrypted attachments persisted in RecordFile)
         createdAt; (timestamp)
         updatedAt; (timestamp)
+
+    RecordFile:
+        Id; (primary key)
+        recordId; (foreign key referencing Record)
+        medicalProfessionalId; (foreign key referencing MedicalProfessional who uploaded the file)
+        fileName; (original file name)
+        mimeType; (uploaded content type)
+        fileSize; (size in bytes)
+        fileEncrypted; (encrypted binary blob)
+        createdAt; (timestamp)
 
     Access:
         Id; (primary key)
