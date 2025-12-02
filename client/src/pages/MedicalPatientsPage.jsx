@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -12,6 +12,18 @@ export default function MedicalPatientsPage() {
   const [newRecordForm, setNewRecordForm] = useState({ summary: '', notes: '' });
   const [newRecordMessage, setNewRecordMessage] = useState('');
   const [newRecordError, setNewRecordError] = useState('');
+
+  const dateTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+    []
+  );
 
   useEffect(() => {
     loadPatients();
@@ -39,6 +51,17 @@ export default function MedicalPatientsPage() {
       setPatientRecords([]);
     }
   }
+
+  const formatDateTime = (value, fallback = '—') => {
+    if (!value) {
+      return fallback;
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return fallback;
+    }
+    return dateTimeFormatter.format(date);
+  };
 
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient);
@@ -74,38 +97,38 @@ export default function MedicalPatientsPage() {
         {patientError && <div className="alert alert-error">{patientError}</div>}
         {patients.length === 0 && <p className="muted">No patients have granted access.</p>}
         {patients.length > 0 && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>MUID</th>
-                <th>Email</th>
-                <th>Access Since</th>
-                <th>Expires</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {patients.map((patient) => (
-                <tr key={patient.id}>
-                  <td>{patient.name}</td>
-                  <td>{patient.muid}</td>
-                  <td>{patient.email}</td>
-                  <td>{new Date(patient.access_granted_at).toLocaleString()}</td>
-                  <td>
-                    {patient.access_expires_at
-                      ? new Date(patient.access_expires_at).toLocaleString()
-                      : 'No expiry'}
-                  </td>
-                  <td>
-                    <button type="button" onClick={() => handleSelectPatient(patient)}>
-                      View Records
-                    </button>
-                  </td>
+          <div className="table-wrapper">
+            <table className="table table-patients">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>MUID</th>
+                  <th>Expires</th>
+                  <th className="actions-col">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {patients.map((patient) => (
+                  <tr key={patient.id}>
+                    <td>{patient.name}</td>
+                    <td>{patient.muid}</td>
+                    <td className="date-cell">
+                      {patient.access_expires_at
+                        ? formatDateTime(patient.access_expires_at, 'No expiry')
+                        : 'No expiry'}
+                    </td>
+                    <td className="actions-cell">
+                      <button type="button" onClick={() => handleSelectPatient(patient)}>
+                        View Records
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

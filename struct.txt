@@ -15,7 +15,7 @@ Models:
         email;
         mobile;
         address;
-        Records{ OneToMany} (relationship with Record model)}
+        Records{ OneToMany (relationship with Record model)}
         accessList {Access.Id} (list of access records for medical professionals who have access to the user's data)
         accessLogs { OneToMany} (relationship with Access model to track access history)
 
