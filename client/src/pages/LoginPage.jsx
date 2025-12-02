@@ -32,7 +32,7 @@ export default function LoginPage() {
       if (payload.role === 'user') {
         navigate('/user/dashboard');
       } else if (payload.role === 'medical') {
-        navigate('/medical/profile');
+        navigate('/medical/dashboard');
       } else if (payload.role === 'admin') {
         navigate('/admin/dashboard');
       } else {

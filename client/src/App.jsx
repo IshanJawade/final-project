@@ -12,6 +12,7 @@ import UserRecordsPage from './pages/UserRecordsPage.jsx';
 import UserAccessPage from './pages/UserAccessPage.jsx';
 import UserDashboard from './pages/UserDashboard.jsx';
 import MedicalProfilePage from './pages/MedicalProfilePage.jsx';
+import MedicalDashboard from './pages/MedicalDashboard.jsx';
 import MedicalPatientsPage from './pages/MedicalPatientsPage.jsx';
 import MedicalRequestsPage from './pages/MedicalRequestsPage.jsx';
 import AdminProfilePage from './pages/AdminProfilePage.jsx';
@@ -69,6 +70,14 @@ export default function App() {
             }
           />
           <Route
+            path="/medical/dashboard"
+            element={
+              <ProtectedRoute allow={["medical"]}>
+                <MedicalDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/medical/patients"
             element={
               <ProtectedRoute allow={["medical"]}>
@@ -117,7 +126,7 @@ export default function App() {
             }
           />
           <Route path="/dashboard/user" element={<Navigate to="/user/dashboard" replace />} />
-          <Route path="/dashboard/medical" element={<Navigate to="/medical/profile" replace />} />
+          <Route path="/dashboard/medical" element={<Navigate to="/medical/dashboard" replace />} />
           <Route path="/dashboard/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route
             path="/user"
@@ -131,7 +140,7 @@ export default function App() {
             path="/medical"
             element={
               <ProtectedRoute allow={["medical"]}>
-                <Navigate to="/medical/profile" replace />
+                <Navigate to="/medical/dashboard" replace />
               </ProtectedRoute>
             }
           />

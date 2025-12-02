@@ -24,6 +24,47 @@ router.get('/me', async (req, res) => {
   }
 });
 
+router.get('/dashboard', async (req, res) => {
+  try {
+    const [activeAccessRes, pendingRequestsRes, recordsAuthoredRes] = await Promise.all([
+      query(
+        `SELECT COUNT(*)::int AS count
+           FROM access
+          WHERE medical_professional_id = $1
+            AND access_revoked_at IS NULL
+            AND (access_expires_at IS NULL OR access_expires_at > NOW())`,
+        [req.auth.id]
+      ),
+      query(
+        `SELECT COUNT(*)::int AS count
+           FROM access_requests
+          WHERE medical_professional_id = $1
+            AND status = 'pending'`,
+        [req.auth.id]
+      ),
+      query(
+        `SELECT COUNT(*)::int AS count
+           FROM records
+          WHERE medical_professional_id = $1`,
+        [req.auth.id]
+      ),
+    ]);
+
+    const parseCount = (result) => (result?.rows?.[0]?.count ? Number(result.rows[0].count) : 0);
+
+    return res.json({
+      stats: {
+        activeAccess: parseCount(activeAccessRes),
+        pendingRequests: parseCount(pendingRequestsRes),
+        recordsAuthored: parseCount(recordsAuthoredRes),
+      },
+    });
+  } catch (err) {
+    console.error('Failed to load medical dashboard stats', err);
+    return res.status(500).json({ message: 'Failed to load dashboard' });
+  }
+});
+
 router.put('/me', async (req, res) => {
   const { name, email, mobile, address, company } = req.body;
   if (!name || !email) {

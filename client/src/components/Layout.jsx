@@ -15,6 +15,7 @@ function getNavLinks(role) {
       ];
     case 'medical':
       return [
+        { to: '/medical/dashboard', label: 'Dashboard' },
         { to: '/medical/patients', label: 'Patients' },
         { to: '/medical/requests', label: 'Access Requests' },
         { to: '/medical/profile', label: 'Profile', icon: 'profile' },
@@ -117,9 +118,30 @@ export default function Layout({ children }) {
 
   const summary = profileSummary || account || null;
   const displayName = getFullName(summary) || summary?.name || 'Account';
-  const displayMuid = summary?.muid && String(summary.muid).trim().length > 0 ? summary.muid : '—';
-  const rawDob = summary?.dateOfBirth ?? summary?.date_of_birth ?? null;
-  const displayDob = rawDob ? formatDateMMDDYYYY(rawDob) : '—';
+  const profileRows = useMemo(() => {
+    if (!summary) {
+      return [];
+    }
+    if (role === 'medical') {
+      return [
+        { label: 'Company', value: summary.company || '—' },
+        { label: 'Email', value: summary.email || '—' },
+      ];
+    }
+    if (role === 'user') {
+      const displayMuid = summary?.muid && String(summary.muid).trim().length > 0 ? summary.muid : '—';
+      const rawDob = summary?.dateOfBirth ?? summary?.date_of_birth ?? null;
+      const displayDob = rawDob ? formatDateMMDDYYYY(rawDob) : '—';
+      return [
+        { label: 'MUID', value: displayMuid || '—' },
+        { label: 'Date of Birth', value: displayDob || '—' },
+      ];
+    }
+    return [
+      { label: 'Email', value: summary.email || '—' },
+      { label: 'Mobile', value: summary.mobile || '—' },
+    ];
+  }, [summary, role]);
 
   return (
     <div className="app-shell">
@@ -183,14 +205,12 @@ export default function Layout({ children }) {
                   <dt>Name</dt>
                   <dd>{displayName}</dd>
                 </div>
-                <div className="profile-meta-row">
-                  <dt>MUID</dt>
-                  <dd>{displayMuid || '—'}</dd>
-                </div>
-                <div className="profile-meta-row">
-                  <dt>Date of Birth</dt>
-                  <dd>{displayDob || '—'}</dd>
-                </div>
+                {profileRows.map((row) => (
+                  <div className="profile-meta-row" key={row.label}>
+                    <dt>{row.label}</dt>
+                    <dd>{row.value || '—'}</dd>
+                  </div>
+                ))}
               </dl>
             </aside>
             <div className="page-container">{children}</div>
