@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { requireAdmin } from '../middleware/auth.js';
 import { query } from '../db.js';
+import { listLogFiles, readLogEntries, createLogStream } from '../utils/logger.js';
 import {
   buildAdminSecrets,
   hydrateAdmin,
@@ -287,6 +288,71 @@ router.post('/professionals/:id/approve', async (req, res) => {
   } catch (err) {
     console.error('Failed to approve professional', err);
     return res.status(500).json({ message: 'Failed to approve professional' });
+  }
+});
+
+router.get('/logs', async (_req, res) => {
+  try {
+    const logs = await listLogFiles();
+    return res.json({ logs });
+  } catch (err) {
+    console.error('Failed to list logs', err);
+    return res.status(500).json({ message: 'Failed to list logs' });
+  }
+});
+
+router.get('/logs/:date', async (req, res) => {
+  const { date } = req.params;
+  const limitRaw = req.query.limit;
+  let limit = 200;
+  if (typeof limitRaw === 'string' && limitRaw.trim() !== '') {
+    const parsed = Number.parseInt(limitRaw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      limit = parsed;
+    }
+  }
+
+  try {
+    const entries = await readLogEntries(date, { limit });
+    return res.json({ entries });
+  } catch (err) {
+    if (err?.message === 'Invalid log date format') {
+      return res.status(400).json({ message: 'Invalid date. Use YYYY-MM-DD.' });
+    }
+    console.error('Failed to read log entries', err);
+    return res.status(500).json({ message: 'Failed to read log entries' });
+  }
+});
+
+router.get('/logs/:date/download', (req, res) => {
+  const { date } = req.params;
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ message: 'Invalid date. Use YYYY-MM-DD.' });
+  }
+  try {
+    const stream = createLogStream(date);
+    if (!stream) {
+      return res.status(404).json({ message: 'Log file not found' });
+    }
+    const filename = `${date}.log`;
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    stream.on('error', (err) => {
+      console.error('Failed while streaming log', err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Failed to stream log file' });
+      } else {
+        res.destroy(err);
+      }
+    });
+    stream.pipe(res);
+    return undefined;
+  } catch (err) {
+    if (err?.message === 'Invalid log date format') {
+      return res.status(400).json({ message: 'Invalid date. Use YYYY-MM-DD.' });
+    }
+    console.error('Failed to download log file', err);
+    return res.status(500).json({ message: 'Failed to download log file' });
   }
 });
 

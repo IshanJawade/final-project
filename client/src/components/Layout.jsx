@@ -25,6 +25,7 @@ function getNavLinks(role) {
         { to: '/admin/dashboard', label: 'Dashboard' },
         { to: '/admin/pending-users', label: 'Users' },
         { to: '/admin/pending-professionals', label: 'Professionals' },
+        { to: '/admin/logs', label: 'Logs' },
         { to: '/admin/profile', label: 'Profile', icon: 'profile' },
       ];
     default:

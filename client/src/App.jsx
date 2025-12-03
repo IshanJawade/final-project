@@ -19,6 +19,7 @@ import AdminProfilePage from './pages/AdminProfilePage.jsx';
 import AdminUsersPage from './pages/AdminUsersPage.jsx';
 import AdminProfessionalsPage from './pages/AdminProfessionalsPage.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import AdminLogsPage from './pages/AdminLogsPage.jsx';
 
 export default function App() {
   return (
@@ -122,6 +123,14 @@ export default function App() {
             element={
               <ProtectedRoute allow={["admin"]}>
                 <AdminProfessionalsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/logs"
+            element={
+              <ProtectedRoute allow={["admin"]}>
+                <AdminLogsPage />
               </ProtectedRoute>
             }
           />
