@@ -797,6 +797,12 @@ button:hover {
   flex-wrap: wrap;
 }
 
+.record-details {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
 .link-button {
   background: transparent;
   border: none;

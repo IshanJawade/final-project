@@ -7,7 +7,7 @@ export default function UserRecordsPage() {
   const [records, setRecords] = useState([]);
   const [recordError, setRecordError] = useState('');
   const [downloadError, setDownloadError] = useState('');
-  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [expandedRecordId, setExpandedRecordId] = useState(null);
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -153,67 +153,63 @@ export default function UserRecordsPage() {
               <div className="muted" style={{ fontStyle: 'italic' }}>No files uploaded</div>
             )}
             <div className="record-actions">
-              <button type="button" onClick={() => setSelectedRecord(rec)}>
-                View Details
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedRecordId((prev) => (prev === rec.id ? null : rec.id))
+                }
+              >
+                {expandedRecordId === rec.id ? 'Hide Details' : 'View Details'}
               </button>
               <button type="button" onClick={() => handleDownload(rec.id)}>
                 Download JSON
               </button>
             </div>
+            {expandedRecordId === rec.id && (
+              <div className="record-details">
+                <div className="record-header" style={{ marginBottom: '16px' }}>
+                  <div className="record-title">
+                    <strong>Record #{rec.displayNumber ?? rec.id}</strong>
+                    {rec.uploaded_by?.name && (
+                      <span className="record-creator">{rec.uploaded_by.name}</span>
+                    )}
+                  </div>
+                  <div className="record-date">{formatDateTime(rec.created_at)}</div>
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <strong>Summary:</strong> {rec.data?.summary ?? 'No summary provided.'}
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <strong>Notes:</strong>
+                  <p style={{ marginTop: '6px', whiteSpace: 'pre-wrap' }}>
+                    {rec.data?.notes ?? 'No notes provided.'}
+                  </p>
+                </div>
+                <div className="muted" style={{ marginBottom: '6px' }}>Files</div>
+                {rec.files?.length > 0 ? (
+                  <div className="record-files" style={{ marginBottom: '16px' }}>
+                    {rec.files.map((file) => (
+                      <div key={file.id} className="record-file-item">
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() => handleOpenFile(file.download_url, file.file_name)}
+                        >
+                          {file.file_name}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ fontStyle: 'italic', marginBottom: '16px' }}>
+                    No files uploaded
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
-
-      {selectedRecord && (
-        <div className="panel">
-          <div className="record-header" style={{ marginBottom: '16px' }}>
-            <div className="record-title">
-              <strong>Record #{selectedRecord.displayNumber ?? selectedRecord.id}</strong>
-              {selectedRecord.uploaded_by?.name && (
-                <span className="record-creator">{selectedRecord.uploaded_by.name}</span>
-              )}
-            </div>
-            <div className="record-date">{formatDateTime(selectedRecord.created_at)}</div>
-          </div>
-          <div style={{ marginBottom: '12px' }}>
-            <strong>Summary:</strong> {selectedRecord.data?.summary ?? 'No summary provided.'}
-          </div>
-          <div style={{ marginBottom: '12px' }}>
-            <strong>Notes:</strong>
-            <p style={{ marginTop: '6px', whiteSpace: 'pre-wrap' }}>
-              {selectedRecord.data?.notes ?? 'No notes provided.'}
-            </p>
-          </div>
-          <div className="muted" style={{ marginBottom: '6px' }}>Files</div>
-          {selectedRecord.files?.length > 0 ? (
-            <div className="record-files" style={{ marginBottom: '16px' }}>
-              {selectedRecord.files.map((file) => (
-                <div key={file.id} className="record-file-item">
-                  <button
-                    type="button"
-                    className="link-button"
-                    onClick={() => handleOpenFile(file.download_url, file.file_name)}
-                  >
-                    {file.file_name}
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="muted" style={{ fontStyle: 'italic', marginBottom: '16px' }}>
-              No files uploaded
-            </div>
-          )}
-          <div className="record-actions">
-            <button type="button" onClick={() => setSelectedRecord(null)}>
-              Close
-            </button>
-            <button type="button" onClick={() => handleDownload(selectedRecord.id)}>
-              Download JSON
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }
