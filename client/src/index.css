@@ -245,10 +245,23 @@ a:hover {
   margin: 0;
 }
 
+.panel-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .log-actions {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.action-toggle-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 .log-layout {
   display: flex;
@@ -598,6 +611,10 @@ button:hover {
 
 .logout-button:hover {
   background: var(--danger-dark);
+}
+
+.centered-col {
+  text-align: center;
 }
 
 .status-banner {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAdminDirectory } from '../utils/useAdminDirectory.js';
@@ -9,6 +9,8 @@ export default function AdminUsersPage() {
   const [pendingUsers, setPendingUsers] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const { users: approvedUsers, loading: directoryLoading, error: directoryError, refresh } = useAdminDirectory({
     includeStats: false,
     includeLists: true,
@@ -29,6 +31,66 @@ export default function AdminUsersPage() {
       setError(err.message);
     }
   }
+
+  const toggleDeleteMode = () => {
+    setMessage('');
+    setError('');
+    if (deleteMode) {
+      setDeleteMode(false);
+      setSelectedIds(new Set());
+      return;
+    }
+    const confirmed = window.confirm('Are you sure you want to enable delete mode?');
+    if (confirmed) {
+      setDeleteMode(true);
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelection = (id, checked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const bulkDeleteUsers = async () => {
+    if (selectedIds.size === 0) {
+      setError('Select at least one user to delete.');
+      return;
+    }
+    if (!window.confirm('Delete selected users permanently? This action cannot be undone.')) {
+      return;
+    }
+    setMessage('');
+    setError('');
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) => apiRequest(`/api/admin/users/${id}`, { method: 'DELETE', token }))
+      );
+      setMessage('Selected users deleted.');
+      setSelectedIds(new Set());
+      setDeleteMode(false);
+      await Promise.all([loadPendingUsers(), refresh()]);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const allApprovedIds = useMemo(() => approvedUsers.map((user) => user.id), [approvedUsers]);
+
+  const toggleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedIds(new Set(allApprovedIds));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
 
   const approveUser = async (id) => {
     setMessage('');
@@ -110,7 +172,27 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="panel">
-        <h2>Registered Users</h2>
+        <header className="panel-header">
+          <div>
+            <h2>Registered Users</h2>
+          </div>
+          <div className="panel-actions">
+            {deleteMode ? (
+              <div className="action-toggle-group">
+                <button type="button" onClick={toggleDeleteMode}>
+                  Cancel
+                </button>
+                <button type="button" className="button-danger" onClick={bulkDeleteUsers}>
+                  Delete Selected
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={toggleDeleteMode}>
+                Delete
+              </button>
+            )}
+          </div>
+        </header>
         {directoryError && <div className="alert alert-error">{directoryError}</div>}
         {directoryLoading && <p className="muted">Loading approved users…</p>}
         {!directoryLoading && approvedUsers.length === 0 && <p className="muted">No approved users yet.</p>}
@@ -119,6 +201,16 @@ export default function AdminUsersPage() {
             <table className="table">
               <thead>
                 <tr>
+                  {deleteMode && (
+                    <th className="centered-col">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all users"
+                        checked={selectedIds.size === allApprovedIds.length && allApprovedIds.length > 0}
+                        onChange={(event) => toggleSelectAll(event.target.checked)}
+                      />
+                    </th>
+                  )}
                   <th>First Name</th>
                   <th>Last Name</th>
                   <th>Email</th>
@@ -129,6 +221,16 @@ export default function AdminUsersPage() {
               <tbody>
                 {approvedUsers.map((user) => (
                   <tr key={user.id}>
+                    {deleteMode && (
+                      <td className="centered-col">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${user.email}`}
+                          checked={selectedIds.has(user.id)}
+                          onChange={(event) => toggleSelection(user.id, event.target.checked)}
+                        />
+                      </td>
+                    )}
                     <td>{getFirstName(user)}</td>
                     <td>{getLastName(user)}</td>
                     <td>{user.email}</td>

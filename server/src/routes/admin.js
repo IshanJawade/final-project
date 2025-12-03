@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { requireAdmin } from '../middleware/auth.js';
-import { query } from '../db.js';
-import { listLogFiles, readLogEntries, createLogStream } from '../utils/logger.js';
+import { query, getClient } from '../db.js';
+import { listLogFiles, readLogEntries, createLogStream, logEvent } from '../utils/logger.js';
 import {
   buildAdminSecrets,
   hydrateAdmin,
@@ -289,6 +289,73 @@ router.post('/professionals/:id/approve', async (req, res) => {
     console.error('Failed to approve professional', err);
     return res.status(500).json({ message: 'Failed to approve professional' });
   }
+});
+
+router.delete('/users/:id', async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ message: 'Invalid user id' });
+  }
+
+  try {
+    const result = await query('DELETE FROM users WHERE id = $1 RETURNING id', [userId]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    await logEvent({
+      type: 'admin.user.deleted',
+      actor: { id: req.auth?.id, role: 'admin' },
+      target: { userId },
+      message: `Admin deleted user ${userId}`,
+    });
+
+    return res.json({ message: 'User deleted' });
+  } catch (err) {
+    console.error('Failed to delete user', err);
+    return res.status(500).json({ message: 'Failed to delete user' });
+  }
+});
+
+router.delete('/professionals/:id', async (req, res) => {
+  const professionalId = Number(req.params.id);
+  if (!Number.isInteger(professionalId)) {
+    return res.status(400).json({ message: 'Invalid professional id' });
+  }
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM record_files WHERE medical_professional_id = $1', [professionalId]);
+    await client.query('UPDATE records SET medical_professional_id = NULL WHERE medical_professional_id = $1', [professionalId]);
+    const deleted = await client.query('DELETE FROM medical_professionals WHERE id = $1 RETURNING id', [professionalId]);
+
+    if (deleted.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Medical professional not found' });
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Failed to delete medical professional', err);
+    return res.status(500).json({ message: 'Failed to delete medical professional' });
+  } finally {
+    client.release();
+  }
+
+  try {
+    await logEvent({
+      type: 'admin.professional.deleted',
+      actor: { id: req.auth?.id, role: 'admin' },
+      target: { professionalId },
+      message: `Admin deleted medical professional ${professionalId}`,
+    });
+  } catch (err) {
+    // logging failures are non-blocking but recorded to stderr by logger
+  }
+
+  return res.json({ message: 'Medical professional deleted' });
 });
 
 router.get('/logs', async (_req, res) => {

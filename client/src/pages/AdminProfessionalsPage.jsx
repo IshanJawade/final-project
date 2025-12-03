@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAdminDirectory } from '../utils/useAdminDirectory.js';
@@ -8,6 +8,8 @@ export default function AdminProfessionalsPage() {
   const [pendingProfessionals, setPendingProfessionals] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const {
     professionals: approvedProfessionals,
     loading: directoryLoading,
@@ -30,6 +32,66 @@ export default function AdminProfessionalsPage() {
       setError(err.message);
     }
   }
+
+  const toggleDeleteMode = () => {
+    setMessage('');
+    setError('');
+    if (deleteMode) {
+      setDeleteMode(false);
+      setSelectedIds(new Set());
+      return;
+    }
+    const confirmed = window.confirm('Are you sure you want to enable delete mode?');
+    if (confirmed) {
+      setDeleteMode(true);
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelection = (id, checked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const bulkDeleteProfessionals = async () => {
+    if (selectedIds.size === 0) {
+      setError('Select at least one professional to delete.');
+      return;
+    }
+    if (!window.confirm('Delete selected professionals permanently? This action cannot be undone.')) {
+      return;
+    }
+    setMessage('');
+    setError('');
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) => apiRequest(`/api/admin/professionals/${id}`, { method: 'DELETE', token }))
+      );
+      setMessage('Selected professionals deleted.');
+      setSelectedIds(new Set());
+      setDeleteMode(false);
+      await Promise.all([loadPendingProfessionals(), refresh()]);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const allProfessionalIds = useMemo(() => approvedProfessionals.map((pro) => pro.id), [approvedProfessionals]);
+
+  const toggleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedIds(new Set(allProfessionalIds));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
 
   const approveProfessional = async (id) => {
     setMessage('');
@@ -87,7 +149,31 @@ export default function AdminProfessionalsPage() {
       </div>
 
       <div className="panel">
-        <h2>Medical Professionals</h2>
+        <header className="panel-header">
+          <div>
+            <h2>Medical Professionals</h2>
+          </div>
+          <div className="panel-actions">
+            {deleteMode ? (
+              <div className="action-toggle-group">
+                <button type="button" onClick={toggleDeleteMode}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button-danger"
+                  onClick={bulkDeleteProfessionals}
+                >
+                  Delete Selected
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={toggleDeleteMode}>
+                Delete
+              </button>
+            )}
+          </div>
+        </header>
         {directoryError && <div className="alert alert-error">{directoryError}</div>}
         {directoryLoading && <p className="muted">Loading approved professionals…</p>}
         {!directoryLoading && approvedProfessionals.length === 0 && (
@@ -98,6 +184,16 @@ export default function AdminProfessionalsPage() {
             <table className="table">
               <thead>
                 <tr>
+                  {deleteMode && (
+                    <th className="centered-col">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all professionals"
+                        checked={selectedIds.size === allProfessionalIds.length && allProfessionalIds.length > 0}
+                        onChange={(event) => toggleSelectAll(event.target.checked)}
+                      />
+                    </th>
+                  )}
                   <th>Name</th>
                   <th>Email</th>
                   <th>Company</th>
@@ -106,6 +202,16 @@ export default function AdminProfessionalsPage() {
               <tbody>
                 {approvedProfessionals.map((pro) => (
                   <tr key={pro.id}>
+                    {deleteMode && (
+                      <td className="centered-col">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${pro.email}`}
+                          checked={selectedIds.has(pro.id)}
+                          onChange={(event) => toggleSelection(pro.id, event.target.checked)}
+                        />
+                      </td>
+                    )}
                     <td>{pro.name}</td>
                     <td>{pro.email}</td>
                     <td>{pro.company || '—'}</td>
