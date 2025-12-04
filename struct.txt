@@ -121,8 +121,9 @@ UI:
     
 
 Technologies:
-    - Backend: Node.js with Express.js
-    - Database: PostgreSQL
-    - Authentication: JWT (JSON Web Tokens)
-    - Encryption: AES256 (Advanced Encryption Standard)
-    - Frontend: React.js
+    - Frontend: React 18 with Vite, React Router, Context API, jsPDF
+    - Backend: Node.js (Express), Multer for uploads, custom structured file logging
+    - Database: PostgreSQL with parameterized queries
+    - Authentication: JWT (JSON Web Tokens) with bcrypt password hashing
+    - Encryption: AES-256 payload and file encryption utilities
+    - Tooling: ESLint configuration, npm scripts for dev/build, modern browser APIs
