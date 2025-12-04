@@ -1,24 +1,19 @@
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { API_BASE, apiRequest } from '../api.js';
+import { apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { formatDateMMDDYYYY } from '../utils/date.js';
 
 export default function MedicalPatientsPage() {
   const { token } = useAuth();
   const [patients, setPatients] = useState([]);
   const [patientError, setPatientError] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [patientRecords, setPatientRecords] = useState([]);
-  const [recordsLoading, setRecordsLoading] = useState(false);
-
-  const [newRecordForm, setNewRecordForm] = useState({ summary: '', notes: '' });
-  const [newRecordFiles, setNewRecordFiles] = useState([]);
-  const [newRecordMessage, setNewRecordMessage] = useState('');
-  const [newRecordError, setNewRecordError] = useState('');
-  const [attachmentError, setAttachmentError] = useState('');
-  const fileInputRef = useRef(null);
-  const activeRecordsRequestRef = useRef(null);
-  const MAX_FILES = 5;
+  const [selectedPatientProfile, setSelectedPatientProfile] = useState(null);
+  const [selectedPatientAccess, setSelectedPatientAccess] = useState(null);
+  const [profileError, setProfileError] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const activeProfileRequestRef = useRef(null);
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -47,158 +42,66 @@ export default function MedicalPatientsPage() {
       setPatients([]);
     }
   }
-
-  async function loadPatientRecords(userId) {
-    activeRecordsRequestRef.current = userId;
-    setRecordsLoading(true);
-    try {
-      const payload = await apiRequest(`/api/medical/patients/${userId}/records`, { token });
-      const recordsWithNumbers = (payload.records || []).map((record, index, arr) => ({
-        ...record,
-        displayNumber: arr.length - index,
-      }));
-      if (activeRecordsRequestRef.current !== userId) {
-        return;
+  const formatDateTime = useCallback(
+    (value, fallback = 'N/A') => {
+      if (!value) {
+        return fallback;
       }
-      setPatientRecords(recordsWithNumbers);
-      setNewRecordError('');
-      setAttachmentError('');
-    } catch (err) {
-      if (activeRecordsRequestRef.current !== userId) {
-        return;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return fallback;
       }
-      setNewRecordError(err.message);
-      setPatientRecords([]);
-      setAttachmentError('');
-    } finally {
-      if (activeRecordsRequestRef.current === userId) {
-        setRecordsLoading(false);
-      }
-    }
-  }
+      return dateTimeFormatter.format(date);
+    },
+    [dateTimeFormatter]
+  );
 
-  const formatDateTime = (value, fallback = '—') => {
-    if (!value) {
-      return fallback;
-    }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return fallback;
-    }
-    return dateTimeFormatter.format(date);
-  };
-
-  const resetRecordState = useCallback(() => {
-    setNewRecordForm({ summary: '', notes: '' });
-    setNewRecordFiles([]);
-    setNewRecordMessage('');
-    setNewRecordError('');
-    setAttachmentError('');
-    setPatientRecords([]);
-    setRecordsLoading(false);
-    activeRecordsRequestRef.current = null;
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  const resetProfileState = useCallback(() => {
+    setSelectedPatientProfile(null);
+    setSelectedPatientAccess(null);
+    setProfileError('');
+    setProfileLoading(false);
+    activeProfileRequestRef.current = null;
   }, []);
+
+  const loadPatientProfile = useCallback(
+    async (userId) => {
+      activeProfileRequestRef.current = userId;
+      setProfileLoading(true);
+      setProfileError('');
+      try {
+        const payload = await apiRequest(`/api/medical/patients/${userId}/profile`, { token });
+        if (activeProfileRequestRef.current !== userId) {
+          return;
+        }
+        setSelectedPatientProfile(payload.patient || null);
+        setSelectedPatientAccess(payload.access || null);
+      } catch (err) {
+        if (activeProfileRequestRef.current !== userId) {
+          return;
+        }
+        setProfileError(err.message);
+        setSelectedPatientProfile(null);
+        setSelectedPatientAccess(null);
+      } finally {
+        if (activeProfileRequestRef.current === userId) {
+          setProfileLoading(false);
+        }
+      }
+    },
+    [token]
+  );
 
   const handleTogglePatient = (patient) => {
     if (selectedPatient?.id === patient.id) {
-      resetRecordState();
+      resetProfileState();
       setSelectedPatient(null);
       return;
     }
 
-    resetRecordState();
     setSelectedPatient(patient);
-    loadPatientRecords(patient.id);
-  };
-
-  const handleCreateRecord = async (evt) => {
-    evt.preventDefault();
-    if (!selectedPatient) return;
-    setNewRecordError('');
-    setNewRecordMessage('');
-    try {
-      const formData = new FormData();
-      formData.append('summary', newRecordForm.summary);
-      formData.append('notes', newRecordForm.notes);
-      newRecordFiles.forEach((file) => {
-        formData.append('files', file);
-      });
-
-      await apiRequest(`/api/medical/patients/${selectedPatient.id}/records`, {
-        method: 'POST',
-        token,
-        body: formData,
-      });
-      setNewRecordMessage('Record saved.');
-      setNewRecordForm({ summary: '', notes: '' });
-      setNewRecordFiles([]);
-      setAttachmentError('');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      loadPatientRecords(selectedPatient.id);
-    } catch (err) {
-      setNewRecordError(err.message);
-    }
-  };
-
-  const openBlobInNewTab = (blob, fileName) => {
-    const objectUrl = URL.createObjectURL(blob);
-    const newWindow = window.open(objectUrl, '_blank');
-    if (!newWindow) {
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-  };
-
-  const handleOpenAttachment = async (downloadUrl, fileName) => {
-    setAttachmentError('');
-    try {
-      const response = await fetch(`${API_BASE}${downloadUrl}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.message || 'Unable to open file');
-      }
-      const blob = await response.blob();
-      openBlobInNewTab(blob, fileName);
-    } catch (err) {
-      setAttachmentError(err.message || 'Unable to open file');
-    }
-  };
-
-  const handleFileSelection = (evt) => {
-    const files = evt.target.files ? Array.from(evt.target.files) : [];
-    if (files.length === 0) {
-      return;
-    }
-    setNewRecordFiles((prev) => {
-      const combined = [...prev, ...files];
-      if (combined.length > MAX_FILES) {
-        setAttachmentError(`You can upload up to ${MAX_FILES} files per record.`);
-        return prev;
-      }
-      setAttachmentError('');
-      return combined;
-    });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleRemoveSelectedFile = (index) => {
-    setNewRecordFiles((prev) => prev.filter((_, idx) => idx !== index));
+    resetProfileState();
+    loadPatientProfile(patient.id);
   };
 
   useEffect(() => {
@@ -208,7 +111,7 @@ export default function MedicalPatientsPage() {
 
     const updatedPatient = patients.find((patient) => patient.id === selectedPatient.id);
     if (!updatedPatient) {
-      resetRecordState();
+      resetProfileState();
       setSelectedPatient(null);
       return;
     }
@@ -216,7 +119,73 @@ export default function MedicalPatientsPage() {
     if (updatedPatient !== selectedPatient) {
       setSelectedPatient(updatedPatient);
     }
-  }, [patients, selectedPatient, resetRecordState]);
+  }, [patients, selectedPatient, resetProfileState]);
+
+  const initials = useMemo(() => {
+    const source = (selectedPatientProfile?.name || selectedPatient?.name || '').trim();
+    if (source) {
+      const chars = source
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => (part && part[0] ? part[0].toUpperCase() : ''))
+        .join('')
+        .trim();
+      if (chars) {
+        return chars;
+      }
+    }
+    const fallbackEmail = (selectedPatientProfile?.email || selectedPatient?.email || '').trim();
+    if (fallbackEmail) {
+      return fallbackEmail.charAt(0).toUpperCase();
+    }
+    const fallbackMuid = (selectedPatientProfile?.muid || selectedPatient?.muid || '').trim();
+    if (fallbackMuid) {
+      return fallbackMuid.charAt(0).toUpperCase();
+    }
+    return '?';
+  }, [selectedPatientProfile, selectedPatient]);
+
+  const formattedDob = useMemo(() => {
+    if (!selectedPatientProfile?.date_of_birth) {
+      return 'N/A';
+    }
+    const formatted = formatDateMMDDYYYY(selectedPatientProfile.date_of_birth);
+    return formatted || 'N/A';
+  }, [selectedPatientProfile]);
+
+  const daysRemaining = useMemo(() => {
+    if (!selectedPatientAccess || !selectedPatientAccess.expires_at) {
+      return null;
+    }
+    if (typeof selectedPatientAccess.days_remaining === 'number') {
+      return selectedPatientAccess.days_remaining;
+    }
+    const expiry = new Date(selectedPatientAccess.expires_at);
+    if (Number.isNaN(expiry.getTime())) {
+      return null;
+    }
+    const diff = Math.ceil((expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return Math.max(diff, 0);
+  }, [selectedPatientAccess]);
+
+  const accessSummary = useMemo(() => {
+    if (!selectedPatientAccess) {
+      return 'Access information unavailable.';
+    }
+    if (!selectedPatientAccess.expires_at) {
+      return 'Access does not expire.';
+    }
+    if (daysRemaining === null) {
+      return 'Access expiry unknown.';
+    }
+    if (daysRemaining === 0) {
+      return 'Access expires today.';
+    }
+    if (daysRemaining === 1) {
+      return '1 day of access remaining.';
+    }
+    return `${daysRemaining} days of access remaining.`;
+  }, [selectedPatientAccess, daysRemaining]);
 
   return (
     <>
@@ -252,7 +221,7 @@ export default function MedicalPatientsPage() {
                         </td>
                         <td className="actions-cell">
                           <button type="button" onClick={() => handleTogglePatient(patient)}>
-                            {isExpanded ? 'Hide Records' : 'View Records'}
+                            {isExpanded ? 'Hide Details' : 'View Records'}
                           </button>
                         </td>
                       </tr>
@@ -262,7 +231,7 @@ export default function MedicalPatientsPage() {
                             <div className="panel" style={{ marginTop: '16px' }}>
                               <header className="panel-header" style={{ marginBottom: '16px' }}>
                                 <div>
-                                  <h2 style={{ marginTop: 0, marginBottom: '4px' }}>Records for {patient.name}</h2>
+                                  <h2 style={{ marginTop: 0, marginBottom: '4px' }}>Patient Snapshot</h2>
                                   <p className="muted" style={{ margin: 0 }}>MUID: {patient.muid}</p>
                                 </div>
                                 <Link
@@ -274,115 +243,102 @@ export default function MedicalPatientsPage() {
                                   View Profile
                                 </Link>
                               </header>
-                              {newRecordError && <div className="alert alert-error">{newRecordError}</div>}
-                              {newRecordMessage && <div className="alert alert-success">{newRecordMessage}</div>}
-                              {attachmentError && <div className="alert alert-error">{attachmentError}</div>}
-                              <form
-                                className="form-grid"
-                                onSubmit={handleCreateRecord}
-                                encType="multipart/form-data"
-                              >
-                                <label>
-                                  Summary
-                                  <input
-                                    value={newRecordForm.summary}
-                                    onChange={(evt) =>
-                                      setNewRecordForm((prev) => ({ ...prev, summary: evt.target.value }))
-                                    }
-                                    required
-                                  />
-                                </label>
-                                <label>
-                                  Notes
-                                  <textarea
-                                    rows="3"
-                                    value={newRecordForm.notes}
-                                    onChange={(evt) =>
-                                      setNewRecordForm((prev) => ({ ...prev, notes: evt.target.value }))
-                                    }
-                                    required
-                                  />
-                                </label>
-                                <label>
-                                  Attachments
-                                  <input
-                                    type="file"
-                                    multiple
-                                    accept=".pdf,image/*"
-                                    ref={fileInputRef}
-                                    onChange={handleFileSelection}
-                                  />
-                                  <small className="muted">You can upload up to {MAX_FILES} files.</small>
-                                </label>
-                                {newRecordFiles.length > 0 && (
-                                  <div className="record-files" style={{ marginTop: '4px' }}>
-                                    {newRecordFiles.map((file, index) => (
-                                      <div key={`${file.name}-${index}`} className="record-file-item">
-                                        <span
-                                          style={{
-                                            flex: '1 1 auto',
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                          }}
-                                        >
-                                          {file.name}
-                                        </span>
-                                        <button
-                                          type="button"
-                                          className="link-button"
-                                          onClick={() => handleRemoveSelectedFile(index)}
-                                        >
-                                          Remove
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <button type="submit">Add Record</button>
-                              </form>
-                              {recordsLoading && <p className="muted">Loading records...</p>}
-                              {!recordsLoading && patientRecords.length === 0 && (
-                                <p className="muted">No records available.</p>
+                              {profileError && <div className="alert alert-error">{profileError}</div>}
+                              {profileLoading && <p className="muted">Loading patient details...</p>}
+                              {!profileLoading && !selectedPatientProfile && !profileError && (
+                                <p className="muted">Patient details are unavailable.</p>
                               )}
-                              {!recordsLoading &&
-                                patientRecords.map((record) => (
-                                  <div key={record.id} className="record-card">
-                                    <div className="record-header">
-                                      <div className="record-title">
-                                        <strong>Record #{record.displayNumber ?? record.id}</strong>
-                                        {record.uploaded_by?.name && (
-                                          <span className="record-creator">{record.uploaded_by.name}</span>
-                                        )}
+                              {!profileLoading && selectedPatientProfile && (
+                                <div
+                                  className="dashboard-grid"
+                                  style={{ gap: '40px', alignItems: 'stretch', marginTop: '8px' }}
+                                >
+                                  <div className="profile-sidebar" style={{ position: 'static', marginTop: 0 }}>
+                                    <div className="avatar-placeholder" aria-hidden="true">
+                                      <span>{initials !== '?' ? initials : 'Avatar'}</span>
+                                    </div>
+                                    <dl className="profile-meta">
+                                      <div className="profile-meta-row">
+                                        <dt>Name</dt>
+                                        <dd>{selectedPatientProfile.name || 'N/A'}</dd>
                                       </div>
-                                      <div className="record-date">{formatDateTime(record.created_at)}</div>
-                                    </div>
-                                    <div className="text-single-line">
-                                      <strong>Summary:</strong> {record.data?.summary ?? 'No summary provided.'}
-                                    </div>
-                                    <div className="text-two-lines">
-                                      <strong>Notes:</strong> {record.data?.notes ?? 'No notes provided.'}
-                                    </div>
-                                    <div className="muted" style={{ marginTop: '8px' }}>Files</div>
-                                    {record.files?.length > 0 ? (
-                                      <div className="record-files">
-                                        {record.files.map((file) => (
-                                          <div key={file.id} className="record-file-item">
-                                            <button
-                                              type="button"
-                                              className="link-button"
-                                              onClick={() => handleOpenAttachment(file.download_url, file.file_name)}
-                                            >
-                                              {file.file_name}
-                                            </button>
-                                          </div>
-                                        ))}
+                                      <div className="profile-meta-row">
+                                        <dt>Date of Birth</dt>
+                                        <dd>{formattedDob}</dd>
                                       </div>
-                                    ) : (
-                                      <div className="muted" style={{ fontStyle: 'italic' }}>No files uploaded</div>
-                                    )}
+                                      <div className="profile-meta-row">
+                                        <dt>Year of Birth</dt>
+                                        <dd>{selectedPatientProfile.year_of_birth || 'N/A'}</dd>
+                                      </div>
+                                      <div className="profile-meta-row">
+                                        <dt>Email</dt>
+                                        <dd>{selectedPatientProfile.email || 'N/A'}</dd>
+                                      </div>
+                                      <div className="profile-meta-row">
+                                        <dt>Mobile</dt>
+                                        <dd>{selectedPatientProfile.mobile || 'N/A'}</dd>
+                                      </div>
+                                      <div className="profile-meta-row">
+                                        <dt>Address</dt>
+                                        <dd>{selectedPatientProfile.address || 'N/A'}</dd>
+                                      </div>
+                                    </dl>
                                   </div>
-                                ))}
+                                  <div
+                                    style={{
+                                      flex: '1 1 auto',
+                                      minWidth: 0,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '24px',
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        border: '1px solid var(--border)',
+                                        borderRadius: '12px',
+                                        background: 'var(--surface)',
+                                        boxShadow: 'var(--shadow-soft)',
+                                        padding: '24px',
+                                      }}
+                                    >
+                                      <h3 style={{ margin: '0 0 16px 0' }}>Access Overview</h3>
+                                      <p>{accessSummary}</p>
+                                      <dl className="profile-meta" style={{ marginTop: '16px' }}>
+                                        <div className="profile-meta-row">
+                                          <dt>Access Granted</dt>
+                                          <dd>{formatDateTime(selectedPatientAccess?.granted_at)}</dd>
+                                        </div>
+                                        <div className="profile-meta-row">
+                                          <dt>Access Expires</dt>
+                                          <dd>{formatDateTime(selectedPatientAccess?.expires_at, 'No expiry')}</dd>
+                                        </div>
+                                      </dl>
+                                    </div>
+                                    <div
+                                      style={{
+                                        border: '1px solid var(--border)',
+                                        borderRadius: '12px',
+                                        background: 'var(--surface)',
+                                        boxShadow: 'var(--shadow-soft)',
+                                        padding: '24px',
+                                      }}
+                                    >
+                                      <h3 style={{ margin: '0 0 16px 0' }}>Account History</h3>
+                                      <dl className="profile-meta" style={{ marginTop: '16px' }}>
+                                        <div className="profile-meta-row">
+                                          <dt>Created</dt>
+                                          <dd>{formatDateTime(selectedPatientProfile.created_at)}</dd>
+                                        </div>
+                                        <div className="profile-meta-row">
+                                          <dt>Last Updated</dt>
+                                          <dd>{formatDateTime(selectedPatientProfile.updated_at)}</dd>
+                                        </div>
+                                      </dl>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
