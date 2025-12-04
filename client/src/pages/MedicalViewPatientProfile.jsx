@@ -572,30 +572,17 @@ export default function MedicalViewPatientProfile() {
             <h2 style={{ marginBottom: '8px' }}>Patient Records</h2>
             <p className="muted" style={{ margin: 0 }}>Select records to download as PDF or JSON.</p>
           </div>
-          <div className="panel-actions">
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={downloadRecordsAsPdf}
-              disabled={selectedRecordIds.size === 0}
-            >
-              Download PDF
-            </button>
-            <button
-              type="button"
-              onClick={downloadRecordsAsJson}
-              disabled={selectedRecordIds.size === 0}
-            >
-              Download JSON
-            </button>
-          </div>
         </header>
         {recordError && <div className="alert alert-error">{recordError}</div>}
         {newRecordError && <div className="alert alert-error">{newRecordError}</div>}
         {newRecordMessage && <div className="alert alert-success">{newRecordMessage}</div>}
         {attachmentError && <div className="alert alert-error">{attachmentError}</div>}
-        <form className="form-grid" onSubmit={handleCreateRecord} encType="multipart/form-data">
-          <label>
+        <form
+          className="form-grid record-form-grid"
+          onSubmit={handleCreateRecord}
+          encType="multipart/form-data"
+        >
+          <label className="summary-field">
             Summary
             <input
               value={newRecordForm.summary}
@@ -605,7 +592,7 @@ export default function MedicalViewPatientProfile() {
               required
             />
           </label>
-          <label>
+          <label className="notes-field">
             Notes
             <textarea
               rows="3"
@@ -616,7 +603,7 @@ export default function MedicalViewPatientProfile() {
               required
             />
           </label>
-          <label>
+          <label className="attachments-field">
             Attachments
             <input
               type="file"
@@ -628,7 +615,7 @@ export default function MedicalViewPatientProfile() {
             <small className="muted">You can upload up to {MAX_FILES} files.</small>
           </label>
           {newRecordFiles.length > 0 && (
-            <div className="record-files" style={{ marginTop: '4px' }}>
+            <div className="record-files attachments-files">
               {newRecordFiles.map((file, index) => (
                 <div key={`${file.name}-${index}`} className="record-file-item">
                   <span
@@ -652,7 +639,7 @@ export default function MedicalViewPatientProfile() {
               ))}
             </div>
           )}
-          <button type="submit" disabled={!patient}>
+          <button type="submit" className="record-submit" disabled={!patient}>
             Add Record
           </button>
         </form>
@@ -661,20 +648,52 @@ export default function MedicalViewPatientProfile() {
           <p className="muted">No records available.</p>
         )}
         {!recordsLoading && patientRecords.length > 0 && (
-          <div className="record-actions" style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <input
-                type="checkbox"
-                checked={
-                  patientRecords.length > 0 && selectedRecordIds.size === patientRecords.length
-                }
-                onChange={(evt) => toggleSelectAll(evt.target.checked)}
-              />
-              <span>Select all records</span>
-            </label>
-            {selectedRecordIds.size > 0 && (
-              <span className="muted">{selectedRecordIds.size} selected</span>
-            )}
+          <div
+            className="record-actions"
+            style={{
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={
+                    patientRecords.length > 0 && selectedRecordIds.size === patientRecords.length
+                  }
+                  onChange={(evt) => toggleSelectAll(evt.target.checked)}
+                />
+                <span>Select all records</span>
+              </label>
+              {selectedRecordIds.size > 0 && (
+                <span className="muted">{selectedRecordIds.size} selected</span>
+              )}
+            </div>
+            <div
+              className="panel-actions"
+              style={{ display: 'flex', alignItems: 'center', gap: '12px' }}
+            >
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={downloadRecordsAsPdf}
+                disabled={selectedRecordIds.size === 0}
+              >
+                Download PDF
+              </button>
+              <button
+                type="button"
+                onClick={downloadRecordsAsJson}
+                disabled={selectedRecordIds.size === 0}
+              >
+                Download JSON
+              </button>
+            </div>
           </div>
         )}
         {!recordsLoading &&

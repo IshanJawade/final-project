@@ -221,7 +221,7 @@ export default function MedicalPatientsPage() {
                         </td>
                         <td className="actions-cell">
                           <button type="button" onClick={() => handleTogglePatient(patient)}>
-                            {isExpanded ? 'Hide Details' : 'View Records'}
+                            {isExpanded ? 'Hide Details' : 'View Details'}
                           </button>
                         </td>
                       </tr>

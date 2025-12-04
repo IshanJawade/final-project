@@ -516,6 +516,46 @@ form {
   align-items: start;
 }
 
+.form-grid.record-form-grid {
+  grid-template-columns: minmax(260px, 0.95fr) minmax(360px, 1.2fr);
+  grid-template-areas:
+    'summary notes'
+    'attachments notes'
+    'files notes'
+    'actions actions';
+  align-items: start;
+  row-gap: 16px;
+}
+
+.record-form-grid .summary-field {
+  grid-area: summary;
+}
+
+.record-form-grid .notes-field {
+  grid-area: notes;
+}
+
+.record-form-grid .attachments-field {
+  grid-area: attachments;
+}
+
+.record-form-grid .attachments-files {
+  grid-area: files;
+  margin-top: 4px;
+}
+
+.record-form-grid .record-submit {
+  grid-area: actions;
+  justify-self: flex-start;
+  align-self: start;
+  margin-top: -12px;
+}
+
+.record-form-grid .record-submit,
+.record-form-grid > .record-submit {
+  grid-column: auto;
+}
+
 .form-grid.form-stack {
   grid-template-columns: 1fr;
   column-gap: 0;
@@ -558,6 +598,11 @@ textarea {
   font-size: 15px;
   letter-spacing: 0.3px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.record-form-grid textarea {
+  height: 220px;
+  resize: none;
 }
 
 textarea {
