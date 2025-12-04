@@ -15,6 +15,7 @@ import MedicalProfilePage from './pages/MedicalProfilePage.jsx';
 import MedicalDashboard from './pages/MedicalDashboard.jsx';
 import MedicalPatientsPage from './pages/MedicalPatientsPage.jsx';
 import MedicalRequestsPage from './pages/MedicalRequestsPage.jsx';
+import MedicalViewPatientProfile from './pages/MedicalViewPatientProfile.jsx';
 import AdminProfilePage from './pages/AdminProfilePage.jsx';
 import AdminUsersPage from './pages/AdminUsersPage.jsx';
 import AdminProfessionalsPage from './pages/AdminProfessionalsPage.jsx';
@@ -83,6 +84,14 @@ export default function App() {
             element={
               <ProtectedRoute allow={["medical"]}>
                 <MedicalPatientsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/medical/patients/:patientId/profile"
+            element={
+              <ProtectedRoute allow={["medical"]}>
+                <MedicalViewPatientProfile />
               </ProtectedRoute>
             }
           />

@@ -1,4 +1,5 @@
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { API_BASE, apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -259,7 +260,20 @@ export default function MedicalPatientsPage() {
                         <tr className="patient-details-row">
                           <td colSpan={4}>
                             <div className="panel" style={{ marginTop: '16px' }}>
-                              <h2 style={{ marginTop: 0 }}>Records for {patient.name}</h2>
+                              <header className="panel-header" style={{ marginBottom: '16px' }}>
+                                <div>
+                                  <h2 style={{ marginTop: 0, marginBottom: '4px' }}>Records for {patient.name}</h2>
+                                  <p className="muted" style={{ margin: 0 }}>MUID: {patient.muid}</p>
+                                </div>
+                                <Link
+                                  to={`/medical/patients/${patient.id}/profile`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="button-secondary"
+                                >
+                                  View Profile
+                                </Link>
+                              </header>
                               {newRecordError && <div className="alert alert-error">{newRecordError}</div>}
                               {newRecordMessage && <div className="alert alert-success">{newRecordMessage}</div>}
                               {attachmentError && <div className="alert alert-error">{attachmentError}</div>}

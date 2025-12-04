@@ -207,6 +207,74 @@ router.get('/patients', async (req, res) => {
   }
 });
 
+router.get('/patients/:userId/profile', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ message: 'Invalid user id' });
+  }
+
+  try {
+    const accessRes = await query(
+      `SELECT id, access_granted_at, access_expires_at
+         FROM access
+        WHERE user_id = $1
+          AND medical_professional_id = $2
+          AND access_revoked_at IS NULL
+          AND (access_expires_at IS NULL OR access_expires_at > NOW())
+        ORDER BY access_granted_at DESC
+        LIMIT 1`,
+      [userId, req.auth.id]
+    );
+
+    if (accessRes.rowCount === 0) {
+      return res.status(403).json({ message: 'No active access for this user' });
+    }
+
+    const userRes = await query(
+      `SELECT id,
+              muid,
+              profile_encrypted,
+              email_encrypted,
+              year_of_birth,
+              is_approved,
+              created_at,
+              updated_at
+         FROM users
+        WHERE id = $1`,
+      [userId]
+    );
+
+    if (userRes.rowCount === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const patient = hydrateUser(userRes.rows[0]);
+    const accessRow = accessRes.rows[0];
+
+    let daysRemaining = null;
+    if (accessRow.access_expires_at) {
+      const now = Date.now();
+      const expiry = new Date(accessRow.access_expires_at).getTime();
+      if (!Number.isNaN(expiry)) {
+        const diff = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+        daysRemaining = Math.max(diff, 0);
+      }
+    }
+
+    return res.json({
+      patient,
+      access: {
+        granted_at: accessRow.access_granted_at,
+        expires_at: accessRow.access_expires_at,
+        days_remaining: daysRemaining,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to load patient profile', err);
+    return res.status(500).json({ message: 'Failed to load patient profile' });
+  }
+});
+
 router.get('/patients/:userId/records', async (req, res) => {
   const userId = Number(req.params.userId);
   if (!Number.isInteger(userId)) {
