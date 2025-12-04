@@ -304,8 +304,9 @@ router.delete('/users/:id', async (req, res) => {
     }
 
     await logEvent({
+      action: 'ADMIN_USER_DELETE',
       type: 'admin.user.deleted',
-      actor: { id: req.auth?.id, role: 'admin' },
+      actor: { id: req.auth?.id, role: 'admin', username: req.auth?.username ?? null },
       target: { userId },
       message: `Admin deleted user ${userId}`,
     });
@@ -346,8 +347,9 @@ router.delete('/professionals/:id', async (req, res) => {
 
   try {
     await logEvent({
+      action: 'ADMIN_PROFESSIONAL_DELETE',
       type: 'admin.professional.deleted',
-      actor: { id: req.auth?.id, role: 'admin' },
+      actor: { id: req.auth?.id, role: 'admin', username: req.auth?.username ?? null },
       target: { professionalId },
       message: `Admin deleted medical professional ${professionalId}`,
     });

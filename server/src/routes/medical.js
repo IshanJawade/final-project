@@ -9,6 +9,7 @@ import {
   hydrateProfessional,
   hydrateUser,
 } from '../utils/sensitive.js';
+import { logEvent } from '../utils/logger.js';
 
 const router = Router();
 router.use(requireMedicalProfessional);
@@ -261,14 +262,32 @@ router.get('/patients/:userId/profile', async (req, res) => {
       }
     }
 
-    return res.json({
+    const responsePayload = {
       patient,
       access: {
         granted_at: accessRow.access_granted_at,
         expires_at: accessRow.access_expires_at,
         days_remaining: daysRemaining,
       },
-    });
+    };
+
+    logEvent({
+      action: 'PATIENT_PROFILE_VIEW',
+      actor: {
+        id: req.auth.id,
+        role: req.auth.role,
+        username: req.auth.username,
+      },
+      target: {
+        patientId: patient.id,
+        patientMuid: patient.muid,
+      },
+      path: req.originalUrl || req.url,
+      method: req.method,
+      status: 200,
+    }).catch(() => {});
+
+    return res.json(responsePayload);
   } catch (err) {
     console.error('Failed to load patient profile', err);
     return res.status(500).json({ message: 'Failed to load patient profile' });
@@ -291,6 +310,13 @@ router.get('/patients/:userId/records', async (req, res) => {
     if (accessRes.rowCount === 0) {
       return res.status(403).json({ message: 'No active access for this user' });
     }
+
+    const patientRes = await query('SELECT id, muid FROM users WHERE id = $1', [userId]);
+    if (patientRes.rowCount === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const patientRow = patientRes.rows[0];
 
     const recordsRes = await query(
       `SELECT r.id,
@@ -362,8 +388,26 @@ router.get('/patients/:userId/records', async (req, res) => {
         files: attachmentsByRecord[row.id] || [],
       };
     });
+    const responsePayload = { records };
 
-    return res.json({ records });
+    logEvent({
+      action: 'PATIENT_RECORDS_VIEW',
+      actor: {
+        id: req.auth.id,
+        role: req.auth.role,
+        username: req.auth.username,
+      },
+      target: {
+        patientId: patientRow.id,
+        patientMuid: patientRow.muid,
+        recordCount: records.length,
+      },
+      path: req.originalUrl || req.url,
+      method: req.method,
+      status: 200,
+    }).catch(() => {});
+
+    return res.json(responsePayload);
   } catch (err) {
     console.error('Failed to load patient records', err);
     return res.status(500).json({ message: 'Failed to load records' });
@@ -386,6 +430,12 @@ router.post('/patients/:userId/records', upload.array('files', 5), async (req, r
     if (accessRes.rowCount === 0) {
       return res.status(403).json({ message: 'No active access for this user' });
     }
+
+    const patientRes = await query('SELECT id, muid FROM users WHERE id = $1', [userId]);
+    if (patientRes.rowCount === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const patientRow = patientRes.rows[0];
 
     let payload;
     if (req.body.data) {
@@ -430,14 +480,34 @@ router.post('/patients/:userId/records', upload.array('files', 5), async (req, r
       }
     }
 
-    return res.status(201).json({
+    const responsePayload = {
       message: 'Record created',
       record: {
         ...result.rows[0],
         data: payload,
         files: attachments,
       },
-    });
+    };
+
+    logEvent({
+      action: 'PATIENT_RECORD_CREATE',
+      actor: {
+        id: req.auth.id,
+        role: req.auth.role,
+        username: req.auth.username,
+      },
+      target: {
+        patientId: patientRow.id,
+        patientMuid: patientRow.muid,
+        recordId: result.rows[0].id,
+        attachmentCount: attachments.length,
+      },
+      path: req.originalUrl || req.url,
+      method: req.method,
+      status: 201,
+    }).catch(() => {});
+
+    return res.status(201).json(responsePayload);
   } catch (err) {
     console.error('Failed to create record', err);
     return res.status(500).json({ message: 'Failed to create record' });
@@ -656,12 +726,35 @@ router.get('/records/:recordId/files/:fileId/download', async (req, res) => {
       return res.status(404).json({ message: 'File not found' });
     }
 
+    const patientRes = await query('SELECT muid FROM users WHERE id = $1', [record.user_id]);
+    const patientMuid = patientRes.rowCount > 0 ? patientRes.rows[0].muid : null;
+
     const fileRow = fileRes.rows[0];
     const fileBuffer = decryptBuffer(fileRow.file_encrypted);
 
     res.setHeader('Content-Type', fileRow.mime_type || 'application/octet-stream');
     res.setHeader('Content-Length', fileBuffer.length);
     res.setHeader('Content-Disposition', `inline; filename="${encodeURI(fileRow.file_name)}"`);
+
+    logEvent({
+      action: 'RECORD_FILE_DOWNLOAD',
+      actor: {
+        id: req.auth.id,
+        role: req.auth.role,
+        username: req.auth.username,
+      },
+      target: {
+        patientId: record.user_id,
+        patientMuid,
+        recordId,
+        fileId,
+        fileName: fileRow.file_name,
+      },
+      path: req.originalUrl || req.url,
+      method: req.method,
+      status: 200,
+    }).catch(() => {});
+
     return res.send(fileBuffer);
   } catch (err) {
     console.error('Failed to download record file', err);

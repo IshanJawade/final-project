@@ -202,7 +202,13 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ message: 'Account awaiting admin approval' });
     }
 
-    const token = jwt.sign({ id: account.id, role: resolvedRole }, JWT_SECRET, {
+    const tokenPayload = { id: account.id, role: resolvedRole };
+    const actorLabel = resolvedRole === 'user' ? account.muid : account.username;
+    if (actorLabel) {
+      tokenPayload.username = actorLabel;
+    }
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, {
       expiresIn: '12h',
     });
 

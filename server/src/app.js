@@ -28,6 +28,7 @@ app.use((err, req, res, next) => {
   if (err) {
     console.error('Unhandled error', err);
     logEvent({
+      action: 'SERVER_ERROR',
       type: 'error',
       message: err.message,
       stack: err.stack,
@@ -35,6 +36,14 @@ app.use((err, req, res, next) => {
       method: req.method,
       userId: req.auth?.id ?? null,
       role: req.auth?.role ?? null,
+      username: req.auth?.username ?? null,
+      actor: req.auth
+        ? {
+            id: req.auth.id ?? null,
+            role: req.auth.role ?? null,
+            username: req.auth.username ?? null,
+          }
+        : undefined,
     });
     return res.status(500).json({ message: 'Internal server error' });
   }

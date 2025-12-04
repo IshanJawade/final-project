@@ -34,7 +34,16 @@ export function requestLogger(req, res, next) {
       ip: req.ip,
       userId: req.auth?.id ?? null,
       role: req.auth?.role ?? null,
+      username: req.auth?.username ?? null,
     };
+
+    if (req.auth) {
+      entry.actor = {
+        id: req.auth.id ?? null,
+        role: req.auth.role ?? null,
+        username: req.auth.username ?? null,
+      };
+    }
 
     const ua = req.get('user-agent');
     if (ua) {
