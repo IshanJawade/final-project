@@ -72,6 +72,11 @@ export default function Layout({ children }) {
   const initials = useMemo(() => getInitialsFromName(getFullName(account)), [account]);
 
   useEffect(() => {
+    const prettyRole = role ? `${role.charAt(0).toUpperCase()}${role.slice(1)}` : 'Guest';
+    document.title = `${prettyRole}@MedSecure_Access`;
+  }, [role]);
+
+  useEffect(() => {
     if (!token) {
       setProfileSummary(null);
       return;
