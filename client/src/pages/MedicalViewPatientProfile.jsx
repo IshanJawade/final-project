@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { API_BASE, apiRequest } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { formatDateMMDDYYYY } from '../utils/date.js';
+import { jsPDF } from 'jspdf';
 
 const MAX_FILES = 5;
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
@@ -22,6 +23,7 @@ export default function MedicalViewPatientProfile() {
   const [newRecordError, setNewRecordError] = useState('');
   const [newRecordMessage, setNewRecordMessage] = useState('');
   const [attachmentError, setAttachmentError] = useState('');
+  const [selectedRecordIds, setSelectedRecordIds] = useState(new Set());
 
   const [newRecordForm, setNewRecordForm] = useState({ summary: '', notes: '' });
   const [newRecordFiles, setNewRecordFiles] = useState([]);
@@ -63,6 +65,7 @@ export default function MedicalViewPatientProfile() {
     setAttachmentError('');
     setNewRecordForm({ summary: '', notes: '' });
     setNewRecordFiles([]);
+    setSelectedRecordIds(new Set());
     activeRecordsRequestRef.current = null;
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -87,6 +90,7 @@ export default function MedicalViewPatientProfile() {
           return;
         }
         setPatientRecords(recordsWithNumbers);
+        setSelectedRecordIds(new Set());
         setRecordError('');
         setAttachmentError('');
       } catch (err) {
@@ -95,6 +99,7 @@ export default function MedicalViewPatientProfile() {
         }
         setRecordError(err.message);
         setPatientRecords([]);
+        setSelectedRecordIds(new Set());
         setAttachmentError('');
       } finally {
         if (activeRecordsRequestRef.current === requestKey) {
@@ -239,6 +244,176 @@ export default function MedicalViewPatientProfile() {
     } catch (err) {
       setNewRecordError(err.message);
     }
+  };
+
+  const toggleRecordSelection = (recordId, checked) => {
+    setSelectedRecordIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(recordId);
+      } else {
+        next.delete(recordId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (checked) => {
+    if (!checked) {
+      setSelectedRecordIds(new Set());
+      return;
+    }
+    const allIds = patientRecords.map((record) => record.id);
+    setSelectedRecordIds(new Set(allIds));
+  };
+
+  const buildSelectedRecords = () => {
+    if (selectedRecordIds.size === 0) {
+      return [];
+    }
+    const selected = patientRecords.filter((record) => selectedRecordIds.has(record.id));
+    return selected.sort((a, b) => (b.displayNumber || 0) - (a.displayNumber || 0));
+  };
+
+  const downloadRecordsAsJson = () => {
+    const records = buildSelectedRecords();
+    if (records.length === 0) {
+      return;
+    }
+
+    const payload = {
+      patient: {
+        id: patient?.id ?? null,
+        name: patient?.name ?? null,
+        muid: patient?.muid ?? null,
+      },
+      exportedAt: new Date().toISOString(),
+      records,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    });
+    const fileName = `patient-${patient?.muid || patient?.id || 'records'}-records.json`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadRecordsAsPdf = () => {
+    const records = buildSelectedRecords();
+    if (records.length === 0) {
+      return;
+    }
+
+    const doc = new jsPDF();
+    const leftMargin = 14;
+    const rightMargin = 196;
+    const lineHeight = 7;
+    let y = 18;
+
+    const addNewPageIfNeeded = (requiredSpace = 0) => {
+      if (y + requiredSpace > 280) {
+        doc.addPage();
+        y = 18;
+      }
+    };
+
+    doc.setFontSize(16);
+    const title = `Patient Records for ${patient?.name || patient?.muid || 'Patient'}`;
+    const wrappedTitle = doc.splitTextToSize(title, rightMargin - leftMargin);
+    wrappedTitle.forEach((line) => {
+      doc.text(line, leftMargin, y);
+      y += lineHeight;
+    });
+
+    doc.setFontSize(11);
+    const metaLines = [
+      `Exported: ${formatDateTime(new Date().toISOString())}`,
+      `Total Records: ${records.length}`,
+    ];
+    metaLines.forEach((line) => {
+      doc.text(line, leftMargin, y);
+      y += lineHeight;
+    });
+    y += lineHeight;
+
+    records.forEach((record, index) => {
+      addNewPageIfNeeded(40);
+      doc.setFontSize(13);
+      doc.text(`Record #${record.displayNumber ?? record.id}`, leftMargin, y);
+      y += lineHeight;
+
+      doc.setFontSize(11);
+      const recordMeta = [
+        `Created: ${formatDateTime(record.created_at)}`,
+        `Updated: ${formatDateTime(record.updated_at)}`,
+        `Uploaded By: ${record.uploaded_by?.name || 'N/A'}`,
+      ];
+      recordMeta.forEach((line) => {
+        addNewPageIfNeeded(lineHeight);
+        doc.text(line, leftMargin, y);
+        y += lineHeight;
+      });
+
+      const summaryHeader = 'Summary:';
+      const summaryLines = doc.splitTextToSize(
+        record.data?.summary || 'No summary provided.',
+        rightMargin - leftMargin
+      );
+      addNewPageIfNeeded(lineHeight * (summaryLines.length + 2));
+      doc.setFont('helvetica', 'bold');
+      doc.text(summaryHeader, leftMargin, y);
+      doc.setFont('helvetica', 'normal');
+      y += lineHeight;
+      summaryLines.forEach((line) => {
+        doc.text(line, leftMargin, y);
+        y += lineHeight;
+      });
+
+      const notesHeader = 'Notes:';
+      const notesLines = doc.splitTextToSize(
+        record.data?.notes || 'No notes provided.',
+        rightMargin - leftMargin
+      );
+      addNewPageIfNeeded(lineHeight * (notesLines.length + 2));
+      doc.setFont('helvetica', 'bold');
+      doc.text(notesHeader, leftMargin, y);
+      doc.setFont('helvetica', 'normal');
+      y += lineHeight;
+      notesLines.forEach((line) => {
+        doc.text(line, leftMargin, y);
+        y += lineHeight;
+      });
+
+      addNewPageIfNeeded(lineHeight * 4);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Attachments:', leftMargin, y);
+      doc.setFont('helvetica', 'normal');
+      y += lineHeight;
+      if (Array.isArray(record.files) && record.files.length > 0) {
+        record.files.forEach((file) => {
+          addNewPageIfNeeded(lineHeight);
+          doc.text(`- ${file.file_name}`, leftMargin + 4, y);
+          y += lineHeight;
+        });
+      } else {
+        doc.text('No files uploaded', leftMargin + 4, y);
+        y += lineHeight;
+      }
+
+      if (index !== records.length - 1) {
+        y += lineHeight * 2;
+      }
+    });
+
+    const fileName = `patient-${patient?.muid || patient?.id || 'records'}-records.pdf`;
+    doc.save(fileName);
   };
 
   const initials = useMemo(() => {
@@ -392,7 +567,29 @@ export default function MedicalViewPatientProfile() {
       </div>
 
       <div className="panel">
-        <h2>Patient Records</h2>
+        <header className="panel-header" style={{ marginBottom: '16px' }}>
+          <div>
+            <h2 style={{ marginBottom: '8px' }}>Patient Records</h2>
+            <p className="muted" style={{ margin: 0 }}>Select records to download as PDF or JSON.</p>
+          </div>
+          <div className="panel-actions">
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={downloadRecordsAsPdf}
+              disabled={selectedRecordIds.size === 0}
+            >
+              Download PDF
+            </button>
+            <button
+              type="button"
+              onClick={downloadRecordsAsJson}
+              disabled={selectedRecordIds.size === 0}
+            >
+              Download JSON
+            </button>
+          </div>
+        </header>
         {recordError && <div className="alert alert-error">{recordError}</div>}
         {newRecordError && <div className="alert alert-error">{newRecordError}</div>}
         {newRecordMessage && <div className="alert alert-success">{newRecordMessage}</div>}
@@ -463,12 +660,38 @@ export default function MedicalViewPatientProfile() {
         {!recordsLoading && patientRecords.length === 0 && (
           <p className="muted">No records available.</p>
         )}
+        {!recordsLoading && patientRecords.length > 0 && (
+          <div className="record-actions" style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={
+                  patientRecords.length > 0 && selectedRecordIds.size === patientRecords.length
+                }
+                onChange={(evt) => toggleSelectAll(evt.target.checked)}
+              />
+              <span>Select all records</span>
+            </label>
+            {selectedRecordIds.size > 0 && (
+              <span className="muted">{selectedRecordIds.size} selected</span>
+            )}
+          </div>
+        )}
         {!recordsLoading &&
           patientRecords.map((record) => (
             <div key={record.id} className="record-card">
-              <div className="record-header">
-                <div className="record-title">
-                  <strong>Record #{record.displayNumber ?? record.id}</strong>
+              <div className="record-header" style={{ alignItems: 'flex-start', gap: '12px' }}>
+                <div className="record-title" style={{ gap: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedRecordIds.has(record.id)}
+                      onChange={(evt) => toggleRecordSelection(record.id, evt.target.checked)}
+                    />
+                    <span>
+                      <strong>Record #{record.displayNumber ?? record.id}</strong>
+                    </span>
+                  </label>
                   {record.uploaded_by?.name && (
                     <span className="record-creator">{record.uploaded_by.name}</span>
                   )}
