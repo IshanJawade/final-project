@@ -1,4 +1,25 @@
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const DEFAULT_BASE = import.meta.env.DEV ? 'http://localhost:4000' : '/api';
+const rawBase = import.meta.env.VITE_API_URL;
+export const API_BASE = rawBase !== undefined && rawBase !== null && rawBase !== '' ? String(rawBase) : DEFAULT_BASE;
+
+function buildUrl(path) {
+  const base = API_BASE && API_BASE !== '/' ? API_BASE.replace(/\/$/, '') : API_BASE;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  if (!base || base === '/') {
+    return normalizedPath;
+  }
+
+  if (/^https?:\/\//i.test(base)) {
+    return new URL(normalizedPath, `${base}/`).toString();
+  }
+
+  if (normalizedPath.startsWith(base)) {
+    return normalizedPath;
+  }
+
+  return `${base}${normalizedPath}`;
+}
 
 export async function apiRequest(path, { method = 'GET', token, body } = {}) {
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
@@ -7,7 +28,7 @@ export async function apiRequest(path, { method = 'GET', token, body } = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(buildUrl(path), {
     method,
     headers,
     body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,

@@ -15,6 +15,28 @@ actual-vscode/
 - Node.js 18+
 - PostgreSQL 14+ with a database ready for the app
 
+## Docker Compose Stack (local clustering)
+
+The repository includes a production-style compose file with a reverse proxy that load balances three frontend replicas and two backend replicas, plus a managed Postgres instance. No `.env` file is required – sensible defaults are embedded – but you can override any value by exporting environment variables (e.g. `POSTGRES_PASSWORD`, `JWT_SECRET`, `AES_KEY`).
+
+```bash
+# build images, start containers, and scale to the target replica counts
+docker compose up --build -d --scale frontend=3 --scale backend=2
+
+# run migrations and seed data once the stack is healthy
+docker compose run --rm backend npm run migrate
+docker compose run --rm backend npm run seed
+docker compose run --rm backend npm run seed:demo
+
+# view container status
+docker compose ps
+
+# follow aggregated logs (CTRL+C to stop)
+docker compose logs -f
+```
+
+The proxy listens on `http://localhost:8080` by default, serves the SPA, and forwards `/api/*` calls to the backend pool. You can change the host port by setting `APP_PORT` before launching the stack.
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` (adjust as needed for server and client).
