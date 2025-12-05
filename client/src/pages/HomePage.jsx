@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 
 export default function HomePage() {
   return (
@@ -35,7 +34,7 @@ export default function HomePage() {
       </p> */}
       <p>
           Made by Ishan Jawade for Final Project - CPSC 597-03 at Cal State Fullerton CA. <br />
-          Contact: <Link to="mailto:ishanjawade@outlook.com">ishanjawade@outlook.com</Link> <br />
+          Contact: <a to="mailto:ishanjawade@outlook.com">ishanjawade@outlook.com</a> <br />
           GitHub: <a href="https://github.com/ishanjawade">https://github.com/ishanjawade/</a>
       </p>
     </div>
