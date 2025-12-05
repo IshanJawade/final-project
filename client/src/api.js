@@ -21,6 +21,13 @@ function buildUrl(path) {
   return `${base}${normalizedPath}`;
 }
 
+export function resolveApiUrl(path) {
+  if (typeof path === 'string' && /^https?:\/\//i.test(path)) {
+    return path;
+  }
+  return buildUrl(path || '/');
+}
+
 export async function apiRequest(path, { method = 'GET', token, body } = {}) {
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
@@ -28,7 +35,7 @@ export async function apiRequest(path, { method = 'GET', token, body } = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(buildUrl(path), {
+  const response = await fetch(resolveApiUrl(path), {
     method,
     headers,
     body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,

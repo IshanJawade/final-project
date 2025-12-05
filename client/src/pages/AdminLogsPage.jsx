@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { apiRequest, API_BASE } from '../api.js';
+import { apiRequest, resolveApiUrl } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 function formatBytes(value) {
@@ -177,7 +177,7 @@ export default function AdminLogsPage() {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/api/admin/logs/${date}/download`, {
+      const response = await fetch(resolveApiUrl(`/api/admin/logs/${date}/download`), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { apiRequest, API_BASE } from '../api.js';
+import { apiRequest, resolveApiUrl } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function UserRecordsPage() {
@@ -54,7 +54,7 @@ export default function UserRecordsPage() {
   const handleDownload = async (recordId) => {
     setDownloadError('');
     try {
-      const response = await fetch(`${API_BASE}/api/records/${recordId}/download`, {
+      const response = await fetch(resolveApiUrl(`/api/records/${recordId}/download`), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -94,7 +94,7 @@ export default function UserRecordsPage() {
   const handleOpenFile = async (downloadUrl, fileName) => {
     setDownloadError('');
     try {
-      const response = await fetch(`${API_BASE}${downloadUrl}`, {
+      const response = await fetch(resolveApiUrl(downloadUrl), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { API_BASE, apiRequest } from '../api.js';
+import { apiRequest, resolveApiUrl } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { formatDateMMDDYYYY } from '../utils/date.js';
 import { jsPDF } from 'jspdf';
@@ -174,7 +174,7 @@ export default function MedicalViewPatientProfile() {
   const handleOpenAttachment = async (downloadUrl, fileName) => {
     setAttachmentError('');
     try {
-      const response = await fetch(`${API_BASE}${downloadUrl}`, {
+      const response = await fetch(resolveApiUrl(downloadUrl), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
