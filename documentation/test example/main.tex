@@ -1,0 +1,348 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% California State University - Fullerton
+% CPSC-597: Project Seminar - Project Report Template
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[12pt,a4paper,openany,oneside]{book}
+\usepackage[utf8]{inputenc}
+
+% Layout & spacing
+\usepackage[english]{babel}
+\usepackage[margin=1in]{geometry} % 1-inch margins
+\setlength{\parindent}{20pt}
+\setlength{\parskip}{1em}
+\renewcommand{\baselinestretch}{1.5}
+
+% Bibliography
+\usepackage[numbers,square]{natbib}
+\bibliographystyle{IEEEtran}
+
+% Figures & floats
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{array}
+\usepackage{float}
+\usepackage{wrapfig}
+
+% Math
+\usepackage{amsmath}
+\DeclareMathOperator*{\argmin}{argmin}
+
+% Text utilities
+\usepackage{ragged2e}
+\usepackage[nolist,nohyperlinks]{acronym}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+
+% ---- Compact one-line chapter headings: "Chapter X: Title"
+\titleformat{\chapter}[hang]
+  {\normalfont\LARGE\bfseries\raggedright}
+  {Chapter \thechapter:}{0.5em}{}
+  
+\titleformat{\section}[block]
+  {\normalfont\Large\bfseries\raggedright}
+  {\thesection}{0.5em}{}
+
+\titleformat{\subsection}[block]
+  {\normalfont\large\bfseries\raggedright}
+  {\thesubsection}{0.5em}{}
+
+\titleformat{\subsubsection}[block]
+  {\normalfont\normalsize\bfseries\raggedright}
+  {\thesubsubsection}{0.5em}{}
+
+
+% Links
+\usepackage[colorlinks=true,
+            linkcolor=blue,
+            urlcolor=blue,
+            citecolor=black,
+            anchorcolor=blue]{hyperref}
+
+\begin{document}
+
+% ===================== Title Page =====================
+\begin{titlepage}
+\centering
+\vspace{0.8cm}
+\includegraphics[height=6cm]{csuf_logo.png}\par
+
+\vspace{0.75 cm}
+{\Large [Project Title 2]\par}
+
+\vspace{0.5cm}
+{By}\par
+\vspace{0.3cm}
+{\large [Your Name]\par}
+
+\vspace{0.75cm}
+{\large A PROJECT REPORT SUBMITTED IN PARTIAL FULFILLMENT
+OF THE REQUIREMENTS FOR THE COURSE}\par
+{\large CPSC-597: Project (Seminar)}\par
+
+\vspace{0.5cm}
+{\large Master of Science in Computer Science}\par
+
+\vspace{0.5cm}
+{\large CALIFORNIA STATE UNIVERSITY, FULLERTON}\par
+
+\vspace{0.5cm}
+{[Month, Year]}\par
+
+\vspace{0.5cm}
+{\large SUPERVISOR}\par
+{Dr. Duy H. Ho}\par
+
+\vfill
+{\itshape © [Your Name], 2025}
+\end{titlepage}
+
+% ===================== Abstract =====================
+\pagenumbering{roman}
+\setcounter{page}{2}
+
+\thispagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\cfoot{\thepage}
+\begin{center}
+\bfseries ABSTRACT
+\end{center}
+
+
+\begin{justifying}
+The abstract should summarize the key elements of your project, including the motivation, research question, methodology, results, and conclusion. Aim for clarity and conciseness, 150 words is the typical limit. Use plain language so readers unfamiliar with the full report can still grasp the significance of your work. Avoid technical jargon, acronyms, and citations. Remember, this is the “elevator pitch” for your report.
+\end{justifying}
+
+\noindent{Key Words: [Key word1; Key word2; Key word3; Key word4; Key word5].}
+
+
+% ===================== Main Content =====================
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[R]{\thepage}
+\renewcommand{\footrulewidth}{0pt}
+\pagenumbering{arabic}
+
+\chapter{Introduction}
+The introduction should clearly explain the problem you are addressing and why it is significant. Begin with a broad context, then narrow down to your specific research question or project goal. Provide background information, highlight gaps in existing work, and motivate why your project matters.  
+
+For example, advances in deep learning \cite{lecun2015deep, goodfellow2016deep} have transformed domains such as computer vision, natural language processing, and healthcare analytics. Despite this progress, applying these methods to specialized real-time applications remains challenging. In medical imaging, rapid and accurate anomaly detection is critical for clinical decision-making \cite{he2016resnet}. However, conventional convolutional neural networks often require very large datasets and high-performance computing resources, which may not be feasible in many hospital environments. This motivates the development of models that balance accuracy, efficiency, and practicality in real-world settings.  
+
+The main objectives of this project are:  
+
+\begin{enumerate}
+    \item \textbf{Lightweight detection model:} A deep learning approach optimized for real-time use without large-scale GPU clusters.  
+    \item \textbf{Clinical integration:} Operation with limited labeled data and adaptability across imaging modalities (X-ray, MRI, CT).  
+    \item \textbf{Interpretability:} Visual outputs such as heatmaps to support clinician decision-making and trust.  
+\end{enumerate}
+
+
+Conclude the introduction with a roadmap of the report. For example:  
+
+\textit{“The remainder of this report is organized as follows. Chapter 2 reviews prior work on deep learning for medical image analysis and identifies limitations of existing approaches. Chapter 3 describes the proposed methodology, including model architecture, dataset preparation, and evaluation metrics. Chapter 4 discusses findings, limitations, and broader implications. Finally, Chapter 5 concludes with contributions and outlines directions for future work.”}
+
+
+\chapter{Literature Review}
+This chapter demonstrates familiarity with existing work in the field, providing a critical evaluation of prior research and identifying the gap your project aims to address.
+
+Deep learning has become the dominant approach for many AI tasks~\cite{lecun2015deep, goodfellow2016deep}. Convolutional Neural Networks (CNNs), such as ResNet~\cite{he2016resnet}, have achieved remarkable accuracy in image classification challenges by introducing residual connections to mitigate vanishing gradients. Similarly, recurrent neural networks (RNNs), and more specifically Long Short-Term Memory (LSTM) networks~\cite{hochreiter1997lstm}, have proven effective for sequential data modeling in speech, text, and video tasks. While LSTMs excel at capturing long-term dependencies, they can be computationally expensive and prone to overfitting in low-data regimes.
+
+In robotics and instruction-following tasks, traditional imitation learning approaches often struggle with generalization to unseen scenarios. The recently proposed GOALNET framework~\cite{gupta2024goalnet} takes a neuro-symbolic approach, interleaving neural subgoal prediction with classical planning to improve task completion rates, particularly in novel environments. GOALNET’s ability to combine learned perception with symbolic reasoning represents a significant step forward compared to purely neural or purely symbolic baselines.
+
+Visual summaries can be valuable for illustrating how different approaches relate to each other. Figure~\ref{fig:lit_review_example} shows an example from the GOALNET AAAI 2024 paper, which integrates prior work into a high-level conceptual diagram.
+
+% Example diagram from AAAI 2024 GOALNET paper
+\begin{figure}[H]
+\centering
+\includegraphics[width=1\textwidth]{figures/sample_diagram_goalnet.png} % ensure file is in ./figures
+\caption{Conceptual diagram summarizing prior methods and their relationships, extracted from the GOALNET paper~\cite{gupta2024goalnet} published at AAAI 2024, one of the top conferences in Computer Science and Artificial Intelligence. AAAI diagrams are typically high-quality and information-rich. The original GOALNET paper can be accessed at \url{https://ojs.aaai.org/index.php/AAAI/article/view/29990}.}
+\label{fig:lit_review_example}
+\end{figure}
+
+
+To better contrast existing approaches, Table~\ref{tab:lit_review_comparison} compares selected works based on their core methodology, domain, strengths, and limitations.
+
+\begin{table}[H]
+\centering
+\caption{Comparison of related work in deep learning and neuro-symbolic planning.}
+\label{tab:lit_review_comparison}
+\footnotesize
+\begin{tabular}{|p{3cm}|p{3.5cm}|p{3cm}|p{3.5cm}|}
+\hline
+\textbf{Work} & \textbf{Core Methodology} & \textbf{Strengths} & \textbf{Limitations} \\ \hline
+LeCun et al. (2015)~\cite{lecun2015deep} & Convolutional Neural Networks for vision tasks & High accuracy in image classification; generalizable to many vision domains & Requires large labeled datasets; less effective for sequential tasks \\ \hline
+He et al. (2016)~\cite{he2016resnet} & Residual learning with skip connections & Mitigates vanishing gradients; enables deeper networks & Increased model complexity; large compute requirements \\ \hline
+Hochreiter \& Schmidhuber (1997)~\cite{hochreiter1997lstm} & Long Short-Term Memory for sequence modeling & Captures long-term dependencies; widely adopted in NLP and time-series & High training cost; sensitive to hyperparameters \\ \hline
+Goodfellow et al. (2016)~\cite{goodfellow2016deep} & Comprehensive deep learning frameworks & Integrates various architectures and learning paradigms & Theoretical; implementation details left to practitioners \\ \hline
+Gupta et al. (2024)~\cite{gupta2024goalnet} & Neuro-symbolic planning (GOALNET) combining neural goal inference with classical planners & Strong generalization to unseen tasks; high task completion rate; interpretable intermediate steps & Requires symbolic domain models (PDDL); planner integration overhead \\ \hline
+\end{tabular}
+\end{table}
+
+
+By systematically comparing these works, it becomes evident that while deep learning architectures excel in perception and representation learning, they often lack explicit reasoning capabilities. GOALNET bridges this gap by combining neural perception modules with classical planning, enabling both interpretability and generalization. This hybrid approach inspires the methodological foundation of the present work, which aims to integrate domain knowledge with learning-based models for improved task performance in complex environments.
+
+
+\chapter{Methodology}
+
+This chapter describes the technical approach used to address the research problem. The methodology is structured to ensure reproducibility and clarity. It covers the system architecture, algorithmic flow, mathematical formulations, datasets, experimental settings, and evaluation metrics.
+
+\section{System Architecture}
+The system follows a modular design, integrating perception, reasoning, and action planning components. Figure~\ref{fig:goalnet_sample_plan} illustrates a representative plan generated by the GOALNET* framework in different simulated domains.
+
+% Sample figure
+\begin{figure}[H]
+\centering
+\includegraphics[width=1\textwidth]{figures/sample_diagram_goalnet2.png} % ensure file exists
+\caption{Sample plan in kitchen (top and bottom) and living-room (middle) domains. VirtualHome Simulator~\cite{puig2018virtualhome} and a human-like agent with functionality akin to a single-arm manipulator are used for visualizations. Predicted goal predicates are shown in red. Executed plan at each time step is shown in blue. \textit{Soda} is unseen at training time and GOALNET* reaches a goal state. The verb \textit{heat} is unseen at training time and only \textit{boil} is seen before. Only positive predicates are shown.}
+\label{fig:goalnet_sample_plan}
+\end{figure}
+
+\section{Mathematical Formulation}
+We define the problem as a sequence of subgoal predictions and plan executions:
+\begin{equation}
+\langle \delta^+_t, \delta^-_t \rangle = f_{\theta}(s_t, l, \eta_t)
+\end{equation}
+where:
+\begin{itemize}
+    \item $s_t$ is the symbolic representation of the current world state at time $t$,
+    \item $l$ is the natural language instruction,
+    \item $\eta_t$ is the subgoal history up to time $t$,
+    \item $f_{\theta}$ is the neural subgoal prediction model with learnable parameters $\theta$.
+\end{itemize}
+
+The planner $P(\cdot)$ then computes a feasible action sequence:
+\begin{equation}
+\vec{a}_t = P(\delta^+_t, \delta^-_t, \Lambda)
+\end{equation}
+where $\Lambda$ denotes the domain definition in PDDL.
+
+\section{Algorithmic Flow}
+The methodology can be summarized as the following algorithm.
+
+\begin{algorithm}[H]
+\caption{Interleaved Subgoal Prediction and Planning}
+\begin{algorithmic}[1]
+\State \textbf{Input:} Initial state $s_0$, instruction $l$
+\State Initialize subgoal history $\eta_0 \gets \emptyset$
+\For{$t \gets 0$ to $T$}
+    \State Predict next subgoal $\langle \delta^+_t, \delta^-_t \rangle \gets f_{\theta}(s_t, l, \eta_t)$
+    \If{$\delta^+_t \cup \delta^-_t = \emptyset$}
+        \State \textbf{break}
+    \EndIf
+    \State Plan actions $\vec{a}_t \gets P(\delta^+_t, \delta^-_t, \Lambda)$
+    \State Execute $\vec{a}_t$ to obtain next state $s_{t+1}$
+    \State Update history $\eta_{t+1} \gets \eta_t \cup \{\delta^+_t, \delta^-_t\}$
+\EndFor
+\State \textbf{Output:} Final achieved state $s_T$
+\end{algorithmic}
+\end{algorithm}
+
+
+\section{Datasets and Tools}
+The experiments use simulated environments provided by the VirtualHome Simulator~\cite{puig2018virtualhome}. The system is implemented in \texttt{Python}, leveraging the following tools and libraries:
+\begin{itemize}
+    \item \textbf{PyTorch:} for implementing $f_{\theta}$,
+    \item \textbf{AI2-THOR:} for interactive simulation,
+    \item \textbf{PDDL Planners:} for symbolic action planning.
+\end{itemize}
+
+\section{Hyperparameters}
+The model is trained using the Adam optimizer with a fixed learning rate. Table~\ref{tab:hyperparameters} summarizes the main hyperparameters.
+
+\begin{table}[H]
+\centering
+\caption{Model Hyperparameters}
+\label{tab:hyperparameters}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Parameter} & \textbf{Value} \\ \hline
+Learning Rate & 0.001 \\ \hline
+Batch Size & 64 \\ \hline
+Epochs & 50 \\ \hline
+Optimizer & Adam \\ \hline
+Dropout Rate & 0.3 \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Evaluation Metrics}
+The methodology adopts standard evaluation metrics for planning tasks:
+\begin{itemize}
+    \item \textbf{Goal Reaching Rate (GRR):} Fraction of tasks where all intended subgoals are achieved.
+    \item \textbf{Instruction Edit Distance (IED):} Similarity between predicted and reference plans.
+    \item \textbf{State Jaccard Index (SJI):} Overlap between predicted and actual goal states.
+\end{itemize}
+These metrics ensure both qualitative and quantitative evaluation of the system’s performance.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figures/sample_diagram_goalnet3.png} % ensure the file is in ./figures
+\caption{Performance of baseline and GOALNET model with the size of aggregate goal-predicate sets. This serves as an example of comparison and evaluation with other baselines, a process also known as \textit{benchmarking}.}
+\label{fig:goalnet_benchmark}
+\end{figure}
+
+
+
+\chapter{Discussion}
+Present and analyze your results here. Use charts, graphs, and statistical tests to support your claims. Discuss both the strengths of your approach and any weaknesses or unexpected findings. Relate your discussion back to the original research question.
+
+Your discussion should:
+\begin{itemize}
+  \item Compare results with baseline methods.
+  \item Note trade-offs such as accuracy vs. computational cost.
+  \item Explain unexpected results.
+  \item Suggest improvements or future work.
+\end{itemize}
+
+\textbf{Example:}  
+“Our method achieved a GRR of 65\% vs. 50\% for the baseline, likely due to symbolic planning recovering from early prediction errors. However, inference time increased by 30\%, suggesting a need for planner optimization.”
+
+\textbf{Example:}  
+“In environments with over 10 objects, accuracy dropped. This may be due to the complexity of the object-relation graph, indicating a need for better attention mechanisms.”
+
+Use concise tables or figures to summarize metrics and trends. For example, a bar chart comparing accuracy across models or a table of runtime vs. accuracy can make the trade-offs clear.
+
+\chapter{Conclusion and Future Work}
+Summarize your project’s main contributions, key findings, and the value it adds to the field. This is your final opportunity to clearly state what was achieved and why it matters. Highlight any limitations you encountered and propose realistic directions for future work.
+
+Your conclusion should:
+\begin{itemize}
+    \item Restate the problem and objectives in concise terms.
+    \item Summarize your approach and how it addresses the problem.
+    \item Present key results and what they imply for the field.
+    \item Identify any limitations or constraints.
+    \item Suggest future work that builds on your findings.
+\end{itemize}
+
+\textbf{Example:}  
+``This project addressed the challenge of generalizing robot instruction-following to unseen environments. By combining neural subgoal prediction with symbolic planning, the system improved Goal Reaching Rate by 15\% over the best baseline. While the approach increased inference time, it demonstrated robustness to novel object configurations. Future work will focus on optimizing planning speed and expanding training to multi-agent scenarios.''
+
+\textbf{Example:}  
+``The main contribution of this work is an integrated architecture for perception, reasoning, and planning in household environments. The system’s success in transfer learning scenarios indicates its potential for real-world deployment. However, performance degraded in cluttered environments, suggesting the need for improved attention mechanisms. Future work will explore enhanced attention mechanisms and real-world deployment scenarios.''
+
+
+\section*{Important Reminder for Students}
+For the \textbf{final project submission}, the body of your report (all main chapters) must be at least \textbf{40 pages}, excluding the bibliography, table of contents, list of figures, and list of tables. This requirement ensures that your written work thoroughly captures your research problem, background, methodology, results, and conclusions.
+
+While active project development is critical, \textbf{documenting and reporting your work is equally important}. A well-maintained report not only consolidates your findings but also helps you reflect on progress, identify gaps, and refine or even redefine objectives as needed. Continuous documentation can reveal patterns, strengths, and weaknesses that might not be as apparent during coding or experimentation alone.
+
+Please treat your report as a \textit{living document}:
+\begin{itemize}
+    \item Update it before and after each project checkpoint.
+    \item Revise based on feedback from Zoom meetings with your instructor.
+    \item Regularly refine figures, tables, explanations, and references to ensure clarity and accuracy.
+\end{itemize}
+
+Consistent updates throughout the semester will make the final submission more complete, coherent, and ready for evaluation without last-minute rushes.
+
+
+
+
+% ===================== References & Appendix =====================
+\clearpage
+\bibliography{bibliography}
+\end{document}

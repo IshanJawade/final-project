@@ -1,0 +1,424 @@
+ABSTRACT
+
+This report presents the design and implementation of a HIPAA-compliant medical data management system that enables patients to maintain fine-grained control over access to their electronic medical records. The system provides a secure, auditable platform where users, medical professionals, and administrators interact through role-specific workflows while ensuring that sensitive health information remains protected at all times. The work focuses on three core goals: enforcing regulatory-grade security controls, providing transparent and reversible data-sharing mechanisms, and delivering a practical web-based application that could reasonably be deployed in a clinical or telemedicine environment.
+
+The platform follows a modern three-tier architecture with a React-based frontend, a Node.js/Express backend, and a PostgreSQL database. Security is built in through the consistent application of AES-256 encryption for medical payloads and file attachments, HTTPS for transport security (in deployment), and JWT-based authentication combined with robust password hashing using bcrypt. Role-based access control differentiates end users, licensed medical professionals, and system administrators. Users can grant and revoke access to their medical records, while medical professionals can request access and create or update records only within the permitted scope. All access and modification events are logged to support auditing and incident investigation.
+
+Beyond the technical implementation, the project formalizes a data model that reflects realistic medical workflows, including user identity, medical professionals’ affiliations, structured medical records, encrypted file attachments, and a detailed access log. The report evaluates the system in terms of security properties, usability, and extensibility. Limitations and potential compliance gaps are discussed, together with recommendations for deploying such a system in real-world clinical settings. Overall, the project demonstrates that a carefully engineered full-stack web application can provide strong confidentiality and integrity guarantees while preserving user agency over their own health data.
+
+Key Words: HIPAA compliance; electronic medical records; data privacy; access control; web application security.
+
+
+Chapter 1: Introduction and Motivation
+
+1.1 Background and Context
+
+The increasing digitization of healthcare has transformed how medical information is created, stored, exchanged, and analyzed. Electronic Health Records (EHRs) and Personal Health Records (PHRs) have become foundational elements of modern medical practice, enabling more timely access to patient history, test results, prescriptions, and clinical notes. At the same time, the sensitivity of medical data and the potential harms arising from unauthorized disclosure—such as discrimination, reputational damage, or identity theft—make privacy protection a critical concern. Health data are often considered among the most sensitive categories of personal information, and regulators across jurisdictions have introduced stringent requirements to govern their use.
+
+In the United States, the Health Insurance Portability and Accountability Act (HIPAA) establishes national standards for the protection of individually identifiable health information. Covered entities and their business associates must implement administrative, physical, and technical safeguards to ensure the confidentiality, integrity, and availability of protected health information (PHI). These requirements influence how software systems for healthcare must be designed, especially when they involve cloud-based storage, remote access by providers, telemedicine scenarios, or patient-facing portals.
+
+Despite the proliferation of EHR platforms and patient portals, end users frequently have limited visibility into who has accessed their records and limited control over ongoing data-sharing relationships. Many existing systems focus primarily on provider workflows rather than patient agency. Users may sign broad consent forms at registration, after which access decisions are driven largely by institutional policies rather than explicit, per-relationship approvals that users can later revoke. Furthermore, legacy systems are often monolithic, difficult to extend, and not designed around modern security engineering best practices.
+
+1.2 Problem Statement
+
+This project addresses the problem of designing and implementing a web-based medical data management system that combines practical clinical workflows with robust patient-centric access control and strong technical safeguards. Specifically, the system must:
+
+• Allow users (patients) to securely register, authenticate, and manage their own profiles and medical records.
+• Enable verified medical professionals to access patient data only when appropriate consent exists or explicit access has been granted.
+• Provide administrators with tools to supervise registrations, approve or reject accounts, and oversee access logs for compliance monitoring.
+• Enforce security properties aligned with HIPAA expectations, particularly confidentiality and integrity of PHI.
+• Support fine-grained, revocable access: users should be able to grant and revoke access to individual professionals or entities, with those changes taking effect promptly.
+• Maintain comprehensive logs of record access and modification events to support auditing, incident response, and forensic analysis.
+
+The core challenge is to integrate these requirements into a cohesive system that remains usable for non-technical users, does not impose excessive friction on legitimate clinical workflows, and can be realistically deployed with common web technologies. The system developed in this project, referred to generically as the HIPAA-Compliant Medical Data Management System, is an attempt to meet this challenge.
+
+1.3 Objectives
+
+The project has both technical and conceptual objectives. The primary objectives are:
+
+1. Design a data model and access control scheme suitable for managing sensitive medical records, supporting multiple roles (User, MedicalProfessional, Admin) and representing relationships such as access grants, record ownership, and file attachments.
+2. Implement a secure backend service using Node.js and Express that exposes authenticated RESTful APIs for registration, login, record management, access control, and auditing operations.
+3. Implement a responsive web frontend using React and Vite that offers distinct dashboard experiences for users, medical professionals, and administrators, using React Router and Context API for state management and protected routes.
+4. Integrate robust security mechanisms: JWT-based authentication, bcrypt-based password hashing, AES-256 encryption for record payloads and uploaded files, and secure logging for audit purposes.
+5. Demonstrate the system’s behavior through realistic usage flows such as user registration, record creation, access granting, record viewing by medical professionals, and revocation of access.
+6. Analyze how the implemented system aligns with HIPAA technical safeguard requirements and identify remaining gaps that would need to be addressed for production deployment.
+
+Secondary objectives include documenting the development process, explaining key design decisions, and reflecting on trade-offs between usability, performance, and security. The report is structured to guide the reader from high-level motivations and regulatory context down to concrete implementation details and potential extensions.
+
+1.4 Scope and Limitations
+
+The system developed in this project is a proof-of-concept and educational artifact rather than a production-ready EHR solution. It focuses on core aspects of secure data handling and access management rather than the full breadth of clinical functionality implemented in commercial systems. As such, several boundaries of scope are recognized:
+
+• The system does not integrate with external insurance systems, laboratory information systems, or e-prescription networks. Instead, it focuses on internal record creation and access workflows.
+• The deployment environment assumed in this project is a controlled setting using Docker and local or development-grade infrastructure. The report discusses how the system could be hardened for production, but such hardening is outside the implementation scope.
+• While the design aims to be HIPAA-aligned, a formal legal or compliance certification process is not performed. Instead, the report maps implemented features to relevant HIPAA concepts and identifies areas requiring further work.
+• User identity verification (e.g., verifying that a registered medical professional is licensed) is simplified and handled at the application level through administrator approval. Integration with external verification services is left as future work.
+
+1.5 Organization of the Report
+
+The remainder of this report is organized into the following chapters:
+
+• Chapter 2 surveys related work and background literature in the domains of electronic health records, access control models, web application security, and HIPAA-compliant system design.
+• Chapter 3 presents the system architecture and data model, including diagrams of the components, deployment topology, and entity-relationship structure of the database.
+• Chapter 4 details the implementation of the backend and frontend subsystems, covering technology choices, API design, encryption utilities, and representative user interface flows.
+• Chapter 5 describes the logging, testing, and evaluation strategy, including how the system was validated via functional testing and how security-related properties were inspected and reasoned about.
+• Chapter 6 discusses the overall findings, design trade-offs, limitations, and potential extensions or improvements.
+• Chapter 7 concludes the report with a concise summary of contributions and outlines directions for future work.
+
+
+Chapter 2: Related Work and Background
+
+2.1 Electronic Health Records and Patient Portals
+
+Electronic Health Records have been widely adopted across hospitals, clinics, and private practices as replacements for paper-based charts. EHR systems typically provide core functionalities such as recording patient demographics, diagnoses, medication lists, allergies, lab results, and visit summaries. Over time, many EHR platforms have been extended with patient portals, allowing individuals to log in remotely to view selected parts of their health record, request prescription refills, and communicate with providers.
+
+Commercial EHR vendors often emphasize interoperability, billing integration, and compliance with health information exchange standards. However, user experience for patients is sometimes secondary, and the level of control that patients have over data sharing is variable. Systems may implement global privacy flags or consent forms, but not necessarily fine-grained mechanisms for users to grant and revoke access to individual professionals or third-party organizations.
+
+The project described in this report borrows the patient portal concept but places explicit user-driven access control at the center of the design. Whereas many portals are layered on top of existing EHR back-ends controlled by providers, this system is designed from the ground up with user agency in mind. The ability to maintain a list of professionals who are allowed to see one’s records, together with comprehensive access logs, is treated as a first-class feature rather than a secondary administrative view.
+
+2.2 Access Control Models in Healthcare
+
+Access control in healthcare applications is complex because it must balance multiple, sometimes competing objectives: protecting privacy, ensuring that legitimate care is not obstructed, enabling emergency access in critical situations, and supporting institutional oversight. Common models include Role-Based Access Control (RBAC), Attribute-Based Access Control (ABAC), and Discretionary Access Control (DAC).
+
+In RBAC, permissions are assigned to roles (such as physician, nurse, or billing clerk), and users are assigned to those roles. RBAC simplifies administration in large institutions but can be relatively coarse-grained. In ABAC, access decisions are based on attributes of the user, resource, environment, and requested operation, allowing more context-aware policies (e.g., access only during working hours or only when assigned to a specific ward). DAC grants the resource owner the ability to decide who else can access that resource.
+
+The system developed in this project implements a hybrid approach. On one level, RBAC is used to distinguish Users, MedicalProfessionals, and Admins. On another level, a DAC-like mechanism is provided: each user can explicitly grant or revoke access to their records for specific medical professionals. This combination captures both organizational roles and individual preferences. More advanced ABAC rules—such as time-limited access or emergency override—are discussed as possible future enhancements.
+
+2.3 HIPAA Technical Safeguards
+
+HIPAA’s Security Rule defines a set of administrative, physical, and technical safeguards intended to protect electronic PHI. The technical safeguards are particularly relevant to software system design and include access control, audit controls, integrity mechanisms, person or entity authentication, and transmission security.
+
+From a software engineering perspective, access control entails unique user identification, the ability to establish and modify access privileges, and mechanisms for automatic log-off or session expiry. Audit controls require the recording and review of system activity, especially concerning the creation, reading, updating, and deletion of PHI. Integrity mechanisms involve protecting data from improper alteration or destruction, often via checksums, hashing, or version control, and by restricting who can modify records. Person or entity authentication typically involves passwords, tokens, certificates, or multi-factor methods. Transmission security encompasses the use of cryptographic protocols such as TLS to protect data in transit.
+
+The system in this project addresses many of these safeguards through implementation choices: JWT-based authentication for unique session tokens, bcrypt-based password hashing for authentication, AES-256 encryption for payload confidentiality, and structured logging for auditability. Network-level controls like TLS are delegated to the deployment environment (e.g., reverse proxy configuration in `infra/nginx/reverse-proxy.conf`), consistent with common practice for containerized web applications.
+
+2.4 Web Application Security Practices
+
+Modern web application security is grounded in the principle of defense in depth. No single mechanism is sufficient to guarantee security; instead, multiple layers of control are combined so that the failure of one does not catastrophically compromise the system. Key practices include input validation and sanitization, parameterized database queries to prevent SQL injection, appropriate session handling with secure cookies or tokens, principle of least privilege for database users and service accounts, and systematic logging and monitoring.
+
+The backend implementation in this project uses parameterized queries when interacting with PostgreSQL to mitigate injection risks. The system enforces authentication for all sensitive routes, employs middleware to verify JWTs and extract identity claims, and uses a structured logging subsystem to record each request, including the authenticated identity and the type of operation performed. These measures align with guidelines from common web security resources and checklists.
+
+2.5 Existing Open-Source Projects
+
+Several open-source projects explore secure data management for healthcare, ranging from personal health record applications to research data repositories. Many of these systems, however, are either tightly coupled to specific institutional workflows or have not been explicitly structured around HIPAA’s categories and terminology. A common pattern is to provide basic user authentication and encrypted storage but not to fully leverage audit logs, granular consent management, or well-documented role separation.
+
+The contribution of this project is thus less about introducing entirely new cryptographic primitives and more about integrating known best practices and patterns into a coherent, educationally valuable full-stack implementation. The codebase is structured to be understandable by students and practitioners who are familiar with web development but may be new to regulatory-grade system design.
+
+
+Chapter 3: System Architecture and Design
+
+3.1 High-Level Architecture
+
+The system follows a layered architecture with a clear separation of concerns between presentation, application logic, data access, and infrastructure configuration. At a high level, three main components can be identified:
+
+1. Client Application (Frontend): A single-page application built with React 18 and Vite, served by a lightweight Nginx container. It provides the user interface for all roles, including home, login, registration, and role-specific dashboards.
+2. API Service (Backend): A Node.js/Express server exposing RESTful endpoints for authentication, user and professional management, record management, access control, and administration operations. It encapsulates business logic, validates inputs, enforces authorization rules, and orchestrates database queries and encryption utilities.
+3. Data Layer (Database and Storage): A PostgreSQL database that persists structured data such as users, professionals, records, access relationships, and logs. Encrypted payloads and file attachments are stored as binary blobs or text fields, depending on the table, with cryptographic operations performed in the application layer.
+
+These components are orchestrated using Docker Compose. The `docker-compose.yml` file defines services for the client, server, database, and an Nginx reverse proxy that can terminate TLS and route external requests to the appropriate internal containers. This containerized setup mirrors modern deployment patterns for microservices-oriented applications while remaining manageable on a single development machine.
+
+[Diagram placeholder: High-level architecture diagram showing browser clients connecting via HTTPS to an Nginx reverse proxy, which forwards traffic to the Node.js API service and serves static assets for the React frontend. The API service connects to a PostgreSQL database. All components are represented as Docker containers connected by a virtual network.]
+
+3.2 Component Responsibilities
+
+Each component in the architecture has clear responsibilities designed to minimize coupling and support maintainability.
+
+• Frontend (React + Vite): Responsible for rendering pages, capturing user input, performing client-side validation, managing in-memory authentication state (JWT tokens), and communicating with the backend via a defined API. Role-specific routes are protected using `ProtectedRoute` components and the `AuthContext` for context-aware rendering.
+
+• Backend (Node.js + Express): Responsible for validating and authenticating client requests, checking authorization based on roles and access grants, implementing business rules (e.g., when a record can be created, who can view it), performing encryption and decryption of sensitive fields, and persisting or retrieving data from the database.
+
+• Database (PostgreSQL): Responsible for storing core entities and maintaining referential integrity through foreign keys and constraints. Migrations in `server/src/migrations` evolve the schema in a controlled manner, ensuring that the database structure is consistent across environments.
+
+• Reverse Proxy (Nginx): Responsible for routing HTTP(S) traffic from external clients to the correct internal services, performing TLS termination in production, and enforcing some basic security-related HTTP headers. The configuration in `infra/nginx/reverse-proxy.conf` reflects these responsibilities.
+
+3.3 Data Model Overview
+
+The data model is centered on several core entities: `User`, `MedicalProfessional`, `Record`, `RecordFile`, `Access`, and `Admin`. Each entity corresponds to a relational table with primary keys and foreign key relationships configured in SQL migrations. The `User` entity represents an individual patient and includes a Medical Unique Identifier (MUID) that serves as an internal, non-guessable identifier.
+
+[Diagram placeholder: Entity-relationship diagram (ERD) showing tables User, MedicalProfessional, Record, RecordFile, Access, and Admin. Relationships include: User 1–N Record; MedicalProfessional 1–N Record; Record 1–N RecordFile; User 1–N Access; MedicalProfessional 1–N Access; Admin monitors Users and MedicalProfessionals via approval fields. Primary and foreign keys are labeled.]
+
+3.4 User Entity and Medical Unique Identifier (MUID)
+
+The `User` model captures core patient information and is designed both for usability and security. Fields include a primary key `id`, the `muid` (medical unique identifier), password hash, name, email, mobile number, and address. In addition, there are relationships that link users to their records, access lists, and access logs.
+
+The MUID is generated according to a structured rule:
+
+• It begins with the prefix "MI" to denote medical identifier.
+• It includes the last two digits of the user’s year of birth.
+• It incorporates a four-digit random number.
+• It appends a numeric component derived from the sum of the ASCII values of the first name’s letters, normalized to the first four digits.
+
+This approach yields identifiers that are deterministic with respect to some user attributes yet non-trivially guessable due to the random component. The MUID is used within the system to label records and as a reference granting medical professionals insight into which patient they are working with, without relying on more directly identifying fields such as email. To protect privacy, MUIDs are not treated as secret keys but are nevertheless not exposed more broadly than necessary.
+
+3.5 MedicalProfessional Entity
+
+The `MedicalProfessional` entity represents clinicians, specialists, or other healthcare providers interacting with the system. Core fields include a unique `id`, username, password hash, name, email, mobile number, address, and company or organization. The relationship between `MedicalProfessional` and `User` is many-to-many, mediated by the `Access` table, since a single professional can access records for multiple users (when granted), and a single user can grant access to multiple professionals.
+
+Medical professionals can log in to a dedicated dashboard, where they can view their own profile, inspect the list of users who have granted them access, request access to additional users’ records, and create or update medical records for users in their access list. The backend enforces that no operations on a user’s records can be performed unless a corresponding, active access grant exists.
+
+3.6 Record and RecordFile Entities
+
+Medical information is stored primarily in the `Record` entity. Each record links to a `User` (the patient) and a `MedicalProfessional` (the creator or primary author). A record contains an encrypted data payload that may represent textual notes, diagnoses, prescriptions, or structured clinical information. Timestamps for creation and update enable tracking of the temporal sequence of care events.
+
+The `RecordFile` entity captures file attachments associated with records, such as imaging reports, lab results, or PDFs. Fields include a primary key, a foreign key to the parent record, the identifier of the uploading medical professional, the original file name, MIME type, file size, an encrypted binary blob containing the file contents, and a creation timestamp. File uploads are handled by the backend using Multer, then encrypted using AES-256 before being persisted.
+
+[Diagram placeholder: UML-style class diagram describing Record and RecordFile, including fields for encrypted payloads and relationships back to User and MedicalProfessional.]
+
+3.7 Access Entity and Fine-Grained Control
+
+The `Access` entity encodes the access control relationship between a user and a medical professional. Each record in this table includes an `id`, `userId`, `medicalProfessionalId`, `accessGrantedAt` timestamp, and an `accessRevokedAt` timestamp (which is null when access remains active). This structure allows the system to maintain a history of when a relationship was active, rather than simply a binary flag.
+
+When a user grants access, a new `Access` record is created with the current time as `accessGrantedAt`. When the user revokes access, the corresponding record is updated to set `accessRevokedAt`. Authorization checks for medical professional operations consult this table and allow access only if an active grant exists at the time of the request. This design also simplifies auditing, as it becomes possible to answer questions such as “who had access to this user’s data at a particular time?”
+
+3.8 Admin Entity and Governance
+
+The `Admin` entity represents system administrators responsible for overseeing the platform. Administrators can approve or reject user and medical professional registrations, monitor access logs, and generate or review compliance reports. Fields include `id`, username, password hash, name, email, mobile, address, and references to approved users and professionals.
+
+Admin dashboards emphasize visibility and governance, not direct clinical activity. For instance, administrators can see lists of newly registered accounts awaiting approval, review irregular access events, and respond to potential policy violations. They do not, however, edit clinical content or override patient access decisions, except through well-defined, auditable flows that would be required in emergency access scenarios (left as future work).
+
+3.9 User Interface Design Philosophy
+
+The user interface is deliberately minimalist and inspired by early 2010s web design aesthetics. The objective is to produce a clean, lightweight interface that foregrounds content and controls without animations, overly dynamic effects, or complex visual metaphors. The design principles include:
+
+• Clear navigation menus for each role, exposing only the functions relevant to that user type.
+• Simple, form-based interactions with appropriate input validation, error messages, and success confirmations.
+• Consistent typography, spacing, and layout, ensuring that users can predict how new screens will behave based on prior experience.
+• Avoidance of distraction; the interface does not incorporate modern trends such as excessive shadowing, animated micro-interactions, or parallax scrolling.
+
+This approach aligns with the system’s focus on reliability, clarity, and compliance, rather than marketing-driven design. In healthcare contexts, users often value predictability and ease of use over novelty.
+
+[Diagram placeholder: Wireframe-style diagrams for the Home page, UserDashboard, MedicalDashboard, and AdminDashboard, showing layout regions such as navigation bar, content area, and side panels.]
+
+
+Chapter 4: Implementation Details
+
+4.1 Technology Stack Overview
+
+The implementation relies on widely adopted, open-source technologies with strong ecosystem support. The main technologies include:
+
+• Frontend: React 18 with Vite for fast development builds, React Router for client-side routing, and Context API for global authentication state. The frontend code resides under `client/`, with entry points in `main.jsx` and `App.jsx` and logical organization of pages and components.
+• Backend: Node.js with Express, configured in `server/src/app.js` and `server/src/index.js`. The backend is responsible for routing, authentication middleware, request validation, and JSON responses.
+• Database: PostgreSQL, with schema migrations under `server/src/migrations/`. The `db.js` file abstracts connection pooling and query execution using parameterized statements.
+• Authentication: JSON Web Tokens (JWT) for stateless sessions, with token generation and verification handled in the authentication routes and middleware. Passwords are hashed with bcrypt before storage.
+• Encryption: AES-256 for encrypting sensitive data and file contents. Utilities in `server/src/utils/encryption.js` and `server/src/utils/sensitive.js` centralize cryptographic operations.
+• Logging: A custom structured logging mechanism in `server/src/utils/logger.js` and `server/src/middleware/requestLogger.js`, complemented by a `logs/` directory for persisted log files.
+
+This stack balances modern development practices with operational familiarity, making it suitable for instructional purposes and potential extension.
+
+4.2 Backend Structure and Modules
+
+The backend is organized into several directories reflecting distinct concerns:
+
+• `routes/`: Contains route handlers for `auth`, `user`, `medical`, `admin`, and `records`. Each file defines endpoints for a subset of the API surface, along with route-level middleware to enforce authentication and role checks.
+• `middleware/`: Contains cross-cutting middleware, including `auth.js` for JWT verification and role enforcement, and `requestLogger.js` for logging HTTP requests and responses.
+• `utils/`: Contains utility modules such as `encryption.js`, `sensitive.js`, `dates.js`, `muid.js`, and `logger.js`. These encapsulate cryptographic routines, sensitive value handling, time utilities, identifier generation, and logging functionality.
+• `migrations/`: Contains SQL scripts implementing database schema changes, from initial table creation to subsequent evolutions such as adding access requests, last login timestamps, encrypted payloads, and file attachments.
+
+The central Express application in `app.js` wires these components together, registering middleware and mounting route handlers under appropriate base paths.
+
+4.3 Authentication and Authorization Flow
+
+Authentication follows a standard pattern. When a user or medical professional registers, their password is hashed using bcrypt and stored in the database along with other profile information. During login, the submitted password is compared against the stored hash. If the credentials are valid and the account has been approved by an administrator, the server issues a signed JWT containing claims such as user identifier, role, and token expiry time.
+
+For subsequent requests, the client includes this token in the Authorization header using the Bearer scheme. The `auth` middleware validates the token, ensuring it has not expired and verifying its signature against the server’s secret key. On success, the middleware attaches the authenticated identity and role to the request object, which downstream route handlers can use to enforce further authorization rules.
+
+Authorization checks go beyond mere role verification. For example, when a medical professional attempts to access a user’s record, the `medical` routes consult the `Access` table to confirm that an active grant exists linking the professional and the target user. Similarly, administrative routes require that the authenticated user has the Admin role before allowing them to approve registrations or view global logs.
+
+[Diagram placeholder: Sequence diagram describing the login flow and authenticated API request lifecycle, from credential submission through JWT issuance and subsequent token-based authorization on protected routes.]
+
+4.4 Encryption and Decryption Utilities
+
+Sensitive fields, including record payloads and file contents, are encrypted using AES-256. The encryption utilities are implemented in `encryption.js` and `sensitive.js`, which expose functions to encrypt and decrypt strings and binary data. The encryption key is sourced from environment variables, ensuring that different deployments can use distinct keys and that keys are not hard-coded into the repository.
+
+When a record is created or updated, the server takes the plaintext content, serializes it (if necessary), and passes it to the encryption utility along with the key. The resulting ciphertext is stored in the database. When data must be displayed to an authorized user, the reverse process occurs: the ciphertext is retrieved, decrypted in memory on the server, and returned to the client only over an authenticated and, in production, TLS-protected connection.
+
+For file attachments, Multer handles the initial receipt of the file upload, providing access to the raw binary buffer. This buffer is then encrypted before being saved. Because file sizes may be substantial, streaming or chunked encryption techniques could be considered in future work to minimize memory usage.
+
+4.5 Request Logging and Audit Trails
+
+Comprehensive logging is crucial for detecting misuse, investigating incidents, and demonstrating compliance with audit requirements. The system implements request logging via middleware that records incoming requests, including method, path, authenticated user (if any), and response status. Logs are written in a structured format to files under the `logs/` directory. Additional logs are produced in business logic when critical events occur, such as access grants, revocations, or failed login attempts.
+
+The logging strategy aims to strike a balance between detail and privacy. For example, logs should not contain plaintext medical data or full record payloads, but they should capture metadata such as which user or professional accessed a record at what time. Logs can be rotated or shipped to external monitoring systems in production.
+
+4.6 Database Schema Migrations
+
+Schema migrations in the `migrations/` directory document the evolution of the database. Early migrations define the initial set of tables; later migrations add support for access requests, last login timestamps, encryption-specific columns, and record files. A simple migration script (`scripts/migrate.js`) is used to apply migrations in sequence, ensuring that developers and deployment environments share the same schema state.
+
+Managing schema evolution through migrations is particularly important for regulated systems: it provides a traceable history of structural changes and supports rollback or audit of how the data model has been adapted over time.
+
+4.7 Frontend Routing and Layout
+
+On the client side, `App.jsx` defines the main route structure using React Router. Public routes include the home page, login page, and registration pages for users and medical professionals. Authenticated routes, such as the dashboards for each role, are wrapped with `ProtectedRoute` components that consult the `AuthContext` to determine whether a user is logged in and has the appropriate role.
+
+The `Layout` component provides consistent top-level navigation and layout for all pages. It may contain a header displaying the current user, a navigation menu with links to frequently used sections, and a main content area where child routes are rendered. This structure avoids duplication of navigation logic and ensures a coherent user experience.
+
+4.8 Role-Specific Dashboards and Pages
+
+The frontend defines separate page components for each major role and use case:
+
+• `HomePage`: Introduces the system, explains its purpose, and provides links to login and registration.
+• `LoginPage`: Provides a login form with fields for username and password, allowing users to sign in as either a regular user, medical professional, or administrator, depending on how accounts are configured.
+• `RegisterUserPage` and `RegisterMedicalPage`: Implement registration forms for the two primary non-admin roles, capturing fields such as name, email, mobile, address, and company for medical professionals.
+• `UserDashboard`: Allows users to view and edit personal information, upload and view their medical records, manage their access list (granting and revoking professional access), and change their password. MUID is displayed as a non-editable field.
+• `MedicalDashboard` and associated pages: Allow medical professionals to view their own profile, review the list of users who have granted them access, access medical records for those users, and request access to new users or to share records with colleagues.
+• `AdminDashboard` and admin-specific pages: Allow administrators to review pending registrations, approve or reject user and professional accounts, examine access logs, and review high-level usage statistics.
+
+[Diagram placeholder: Navigation map diagram showing how each role navigates among relevant pages and how routing guards enforce authentication and authorization.]
+
+4.9 Client-Side Utility Modules
+
+The client includes utility modules under `client/src/utils/` such as `date.js` and `useAdminDirectory.js`. The date utilities support consistent formatting and display of timestamps across the interface. The `useAdminDirectory` hook encapsulates logic for fetching or managing lists of entities in the admin views, such as users and professionals. Encapsulating shared logic in hooks and utilities reduces duplication and improves testability.
+
+4.10 Error Handling and User Feedback
+
+Error handling is critical for user trust and smooth workflows. On the backend, errors are normalized and returned with appropriate HTTP status codes, such as 400 for validation failures, 401 or 403 for unauthorized or forbidden operations, and 500 for unexpected internal errors. On the frontend, components interpret these responses and present helpful, non-technical messages to the user, indicating what went wrong and how to proceed.
+
+Examples include validation messages when required fields are missing, warnings when login credentials are incorrect, and confirmations when access has been successfully granted or revoked. Consistent messaging reduces user frustration and helps align expectations about system behavior.
+
+
+Chapter 5: Testing, Evaluation, and Logging
+
+5.1 Functional Testing Strategy
+
+Given the system’s scope and constraints, testing focuses primarily on functional correctness and basic security properties rather than exhaustive performance or load testing. The main categories of tests include:
+
+• Unit tests for core utility functions such as MUID generation, encryption and decryption, and date formatting.
+• Integration tests for authentication flows, ensuring that valid credentials result in token issuance and that invalid credentials are rejected.
+• Endpoint-level tests that simulate typical user journeys, including registration, login, record creation, access granting, record viewing, and access revocation.
+
+In addition to automated tests, manual exploratory testing was conducted through the browser-based user interface. This testing covered different role perspectives, checking that unauthorized actions are consistently blocked and that user-facing feedback is clear.
+
+5.2 Security-Oriented Evaluation
+
+Security evaluation in this project is qualitative and based on inspecting the implementation against known best practices. The following aspects were considered:
+
+• Password handling: Verification that passwords are never stored in plaintext, that bcrypt hashing is used with a suitable work factor, and that password reset flows require secure verification.
+• Token security: Confirmation that JWTs are signed with a strong secret key and have reasonable expiration times; verification that token verification middleware is applied to all sensitive routes.
+• Database access: Validation that parameterized queries are used consistently to prevent SQL injection and that database connections are properly managed and closed.
+• Encryption: Review of encryption utilities to ensure that AES-256 is used correctly and that keys are sourced from environment variables rather than hard-coded constants.
+• Logging: Confirmation that logs capture security-relevant events while avoiding sensitive payloads in plain text.
+
+While this evaluation is not equivalent to a professional penetration test or security audit, it provides confidence that the implemented design substantially improves upon naive or ad hoc approaches to medical data management.
+
+5.3 Usability and Workflow Evaluation
+
+Usability evaluation was conducted informally, focusing on whether typical users can achieve their goals without confusion or unnecessary friction. Key scenarios tested included:
+
+• A new user registering, logging in, and uploading their first medical record.
+• The same user granting access to a specific medical professional and later revoking that access.
+• A medical professional logging in, reviewing the list of users who have granted them access, and viewing or updating a record.
+• An administrator reviewing new registrations, approving suitable accounts, and inspecting recent access logs.
+
+Feedback from these walkthroughs informed minor UI refinements, such as clearer labels, contextual help text, and more informative success and error notifications.
+
+5.4 Logging and Audit Trail Review
+
+To assess the adequacy of auditing, the logs in the `logs/` directory were reviewed after performing a series of typical operations. The review focused on verifying that each access to a protected resource was logged with at least the following fields:
+
+• Timestamp of the event.
+• Identity of the authenticated user or professional.
+• Action type (e.g., record read, record write, access grant, access revoke).
+• Target entity (e.g., which user’s record was accessed).
+• Outcome (success or failure).
+
+This level of logging is sufficient to reconstruct user journeys, detect suspicious patterns, and carry out basic forensic analysis in case of suspected misuse. In a production deployment, logs would be streamed to a centralized, tamper-resistant log management system with alerting on unusual patterns.
+
+5.5 Limitations of the Evaluation
+
+The evaluation is constrained by time, resources, and the educational nature of the project. Load testing at scale, formal threat modeling, vulnerability scanning, and penetration testing are acknowledged as important but are not fully implemented. The report nonetheless outlines how such activities could be incorporated in a future, more comprehensive security assurance program.
+
+
+Chapter 6: Discussion
+
+6.1 Achieved Contributions
+
+The project successfully demonstrates that a HIPAA-aligned medical data management system can be implemented using a modern JavaScript-based stack while embedding strong security primitives in the core design. Key contributions include:
+
+• A clear and extensible data model that captures patients, professionals, medical records, file attachments, access relationships, and administrative governance.
+• A full-stack implementation that integrates React, Node.js/Express, PostgreSQL, JWT authentication, bcrypt password hashing, AES-256 encryption, and structured logging.
+• A user-centric access control model that empowers patients to grant and revoke access to their data at a granular level.
+• Role-specific user interfaces that make distinct workflows visible and intuitive for each role.
+• A documented architecture and set of implementation patterns that can serve as a foundation for students or practitioners exploring secure healthcare application design.
+
+6.2 Trade-offs and Design Choices
+
+Several design trade-offs were made throughout the project. For example, the decision to encrypt record payloads and files at the application layer rather than relying solely on database-level encryption provides portability and reduces dependence on specific database features. However, it also increases application complexity and places greater responsibility on key management.
+
+Similarly, the use of JWTs for stateless authentication simplifies scalability and containerization but requires careful handling to avoid token theft or misuse. In contrast, server-side session storage might offer easier revocation at the cost of increased infrastructure complexity. The project favors an architecture that would scale in a microservices or container-based environment, given the current engineering landscape.
+
+The minimalist user interface prioritizes predictability and clarity over aesthetics. While some users might prefer more modern visual styles, the chosen design supports rapid comprehension and reduced cognitive load, which can be especially important in clinical contexts.
+
+6.3 Alignment with HIPAA Requirements
+
+Although a complete HIPAA compliance program encompasses policies, training, and organizational controls beyond pure software features, the implemented system aligns with many technical safeguards specified in the HIPAA Security Rule. In particular:
+
+• Access control is enforced via unique user accounts, role separation, and an explicit access grant model.
+• Audit controls are supported through structured request and event logging.
+• Integrity mechanisms are present through strict role checks for record modification and the use of encryption to detect tampering at rest.
+• Authentication is handled through password verification and token-based session management.
+• Transmission security is assumed to be provided by TLS in the deployment environment via the Nginx reverse proxy.
+
+Areas not fully addressed include business continuity planning, detailed incident response procedures, off-site backups, and multi-factor authentication. These gaps are documented as part of the system’s limitations.
+
+6.4 Potential Extensions
+
+Numerous enhancements are possible based on the current foundation:
+
+• Multi-factor authentication for all roles, particularly administrators and medical professionals.
+• More advanced access control features, such as time-bound access grants, emergency override with additional logging and approvals, and attribute-based policies.
+• Integration with external systems such as national health information exchanges, lab systems, or wearable device APIs.
+• A richer data model for clinical content, potentially conforming to standards such as FHIR (Fast Healthcare Interoperability Resources).
+• More comprehensive analytics and reporting features for administrators, including geolocation-based access patterns and anomaly detection.
+
+These extensions would move the system closer to production readiness and increase its value in both educational and practical contexts.
+
+
+Chapter 7: Conclusion and Future Work
+
+7.1 Summary of Work
+
+This project has presented the conception, design, and implementation of a HIPAA-oriented medical data management system that places patient control and strong security practices at the forefront. Starting from a clear motivation rooted in the sensitivity of medical data and the regulatory environment, the project defined a set of requirements and translated them into a concrete system architecture.
+
+The implemented platform features distinct roles for users, medical professionals, and administrators, a structured data model with explicit access relationships, and a security architecture leveraging JWTs, bcrypt, AES-256, and audited database operations. The frontend offers role-aware dashboards and workflows, while the backend provides authenticated, authorization-checked APIs and a robust logging framework.
+
+7.2 Reflections and Lessons Learned
+
+During development, several practical lessons emerged. First, security should be treated as an architectural concern from the outset, not as an add-on to be retrofitted later. Decisions about how to model access, where to place encryption boundaries, and how to structure logs are easiest to make when the architecture is still flexible. Second, incremental development with migrations, modular utilities, and automated scripts reduces friction and encourages disciplined evolution of the system. Third, balancing usability with security requires careful thought; mechanisms that are too strict or complex may lead to user workarounds that negate their benefits.
+
+7.3 Future Work
+
+Looking forward, several directions can be pursued:
+
+• Conducting formal threat modeling and risk assessment exercises to systematically identify potential attack vectors and prioritize mitigation strategies.
+• Implementing multi-factor authentication, anomaly detection in access logs, and IP-based or device-based restrictions for sensitive operations.
+• Expanding the clinical feature set, including support for structured lab results, imaging series, and decision-support tools.
+• Evaluating the system with real stakeholders—clinicians, patients, and compliance officers—to gather feedback on usability, workflow fit, and policy alignment.
+• Exploring deployment on cloud platforms with managed database services, secrets management, and monitoring stacks that can further enhance reliability and observability.
+
+By pursuing these directions, the system could progress from a proof-of-concept educational project to an increasingly realistic prototype for secure, patient-centered healthcare data management.
+
+
+References
+
+[This section should contain a complete list of references in IEEE format, covering HIPAA documentation, academic articles on EHR systems and access control, web security best practices, and any frameworks or libraries cited in the text. Entries should be formatted consistently and may include both standards documents and peer-reviewed publications.]
+
+
+Appendix A: Example User Journeys
+
+A.1 User Registration and Record Management
+
+This appendix describes an example scenario in which a new user registers, verifies their account approval, logs in, and creates initial medical records, illustrating the system behavior step by step.
+
+[Text placeholder for detailed step-by-step narrative and, optionally, screenshots to be inserted by the author.]
+
+A.2 Medical Professional Access Workflow
+
+This appendix describes how a medical professional requests access to a patient’s records, how the patient grants or denies that request, and how the professional subsequently views and updates records.
+
+[Text placeholder for detailed step-by-step narrative and supporting diagrams or screenshots.]
+
+A.3 Administrator Oversight and Auditing
+
+This appendix outlines typical admin tasks such as reviewing account registrations, responding to unusual access patterns, and generating periodic compliance summaries.
+
+[Text placeholder for additional workflow descriptions and mock reports.]

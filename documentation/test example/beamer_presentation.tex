@@ -1,0 +1,191 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% California State University, Fullerton
+% CPSC-597 Project Seminar Presentation (Beamer)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[aspectratio=169]{beamer}
+
+% --- Theme & CSUF Colors ---
+\usetheme{Madrid}
+\definecolor{csufblue}{RGB}{0,51,102}
+\definecolor{csuforange}{RGB}{255,102,0}
+\setbeamercolor{structure}{fg=csufblue}
+\setbeamercolor{title}{fg=white,bg=csufblue}
+\setbeamercolor{frametitle}{fg=white,bg=csufblue}
+\setbeamercolor{block title}{fg=csufblue,bg=white}
+\setbeamercolor{block body}{fg=black,bg=white}
+\setbeamertemplate{frametitle continuation}{}
+
+% --- Packages ---
+\usepackage{graphicx,amsmath,algorithm,algpseudocode}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+% --- Title Info ---
+\title[Project Seminar]{[Project Title]}
+\subtitle{CPSC-597: Project Seminar}
+\author{[Your Name] \\ Supervisor: Dr. Duy H. Ho}
+\institute{California State University, Fullerton}
+\date{Fall 2025}
+
+\begin{document}
+
+% ===================== Title Slide =====================
+\begin{frame}
+\centering
+% \vspace{-0.5cm}
+\includegraphics[height=2cm]{figures/csuf_logo.png}\\[-0.5cm]
+\titlepage
+\end{frame}
+
+% ===================== Introduction =====================
+\begin{frame}{Introduction}
+The introduction explains the motivation and significance of the problem.  
+\\[0.5em]
+Advances in deep learning have transformed domains such as computer vision, NLP, and healthcare analytics \cite{lecun2015deep, goodfellow2016deep}. Yet, applying these models to real-time or resource-limited settings remains challenging \cite{he2016resnet}.  
+\\[0.5em]
+\textbf{Objectives:}
+\begin{itemize}
+    \item Develop a lightweight detection model optimized for real-time use.  
+    \item Enable operation with limited labeled data and cross-modality adaptability.  
+    \item Provide interpretability through visual outputs such as heatmaps.  
+\end{itemize}
+\end{frame}
+
+% ===================== Literature Review =====================
+\begin{frame}{Literature Review}
+\small
+Deep learning dominates AI across vision and language \cite{lecun2015deep, goodfellow2016deep}. CNNs such as ResNet \cite{he2016resnet} improve accuracy via residual learning, while LSTMs \cite{hochreiter1997lstm} handle sequence modeling but are costly to train.  
+\\[0.3em]
+Recent neuro-symbolic models like GOALNET \cite{gupta2024goalnet} integrate neural inference with classical planning for generalization.  
+\\[0.3em]
+\textbf{Key Takeaways:}
+\begin{itemize}
+    \item CNNs and LSTMs are powerful but data- and compute-heavy.
+    \item Hybrid methods like GOALNET bridge learning and reasoning.
+    \item Symbolic planning enhances interpretability and robustness.  
+\end{itemize}
+\end{frame}
+% ===================== GOALNET Diagram =====================
+\begin{frame}{Conceptual Overview of Prior Work}
+\centering
+\begin{figure}
+  \includegraphics[width=\textwidth]{figures/sample_diagram_goalnet.png}
+  \caption{Conceptual diagram summarizing prior methods and their relationships, adapted from GOALNET \cite{gupta2024goalnet}.}
+\end{figure}
+\end{frame}
+
+% ===================== Methodology =====================
+\begin{frame}{Methodology Overview}
+\small
+This chapter covers the approach, including architecture, algorithms, and evaluation.  
+\\[0.3em]
+\textbf{System Design:} Modular architecture integrating perception, reasoning, and planning.  
+\\[0.3em]
+\textbf{Mathematical Model:}
+\[
+\langle \delta_t^+, \delta_t^- \rangle = f_\theta(s_t, l, \eta_t), \quad \vec{a}_t = P(\delta_t^+, \delta_t^-, \Lambda)
+\]
+where $f_\theta$ is a neural subgoal predictor and $P$ is a PDDL-based planner.  
+\\[0.3em]
+\textbf{Simulation Tools:} VirtualHome and AI2-THOR \cite{puig2018virtualhome} provide interactive environments.
+\end{frame}
+
+% ===================== Algorithm =====================
+\begin{frame}{Algorithmic Flow}
+\footnotesize
+\begin{algorithm}[H]
+\caption{Interleaved Subgoal Prediction and Planning}
+\begin{algorithmic}[1]
+\State Input: state $s_0$, instruction $l$
+\For{$t=0$ to $T$}
+  \State Predict subgoal $\langle \delta_t^+,\delta_t^- \rangle \gets f_\theta(s_t,l,\eta_t)$
+  \If{subgoals empty} \textbf{break}
+  \EndIf
+  \State Plan actions $\vec{a}_t \gets P(\delta_t^+,\delta_t^-,\Lambda)$
+  \State Execute $\vec{a}_t$; update state $s_{t+1}$ and history $\eta_{t+1}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+\end{frame}
+
+% ===================== Datasets and Tools =====================
+\begin{frame}{Datasets and Tools}
+\begin{itemize}
+    \item \textbf{VirtualHome Simulator} \cite{puig2018virtualhome}: Simulated household tasks.
+    \item \textbf{PyTorch}: Implementation framework for neural models.
+    \item \textbf{AI2-THOR}: Interactive 3D simulation for agent evaluation.
+    \item \textbf{PDDL Planners}: Symbolic reasoning for goal satisfaction.
+\end{itemize}
+\end{frame}
+% ===================== Hyperparameters =====================
+\begin{frame}{Model Hyperparameters}
+\centering
+\begin{table}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Parameter} & \textbf{Value} \\ \hline
+Learning Rate & 0.001 \\ \hline
+Batch Size & 64 \\ \hline
+Epochs & 50 \\ \hline
+Optimizer & Adam \\ \hline
+Dropout Rate & 0.3 \\ \hline
+\end{tabular}
+\caption{Model hyperparameters used for training and evaluation.}
+\end{table}
+\end{frame}
+
+% ===================== Plan Visualization =====================
+\begin{frame}{Sample Plan Visualization}
+\centering
+\begin{figure}
+\includegraphics[width=0.7\textwidth]{figures/sample_diagram_goalnet2.png}
+\caption{Sample plan in kitchen and living-room domains from GOALNET* \cite{puig2018virtualhome}. Predicted goals are shown in red, executed plans in blue, and unseen actions (e.g., \textit{heat}) tested for generalization.}
+\end{figure}
+\end{frame}
+
+% ===================== Evaluation =====================
+\begin{frame}{Evaluation Metrics}
+\small
+\begin{itemize}
+    \item \textbf{Goal Reaching Rate (GRR):} Tasks fully completed.  
+    \item \textbf{Instruction Edit Distance (IED):} Plan similarity to reference.  
+    \item \textbf{State Jaccard Index (SJI):} Overlap between achieved and target states.  
+\end{itemize}
+Metrics assess both quantitative accuracy and qualitative robustness.
+\end{frame}
+
+% ===================== Discussion =====================
+\begin{frame}{Discussion}
+\small
+Our experiments demonstrate that neuro-symbolic integration improves task success and generalization. Compared with baselines, our model achieves higher GRR and SJI but modestly longer inference time.  
+\\[0.3em]
+\textbf{Insights:}
+\begin{itemize}
+  \item Symbolic planning recovers from prediction errors.
+  \item Hybrid reasoning enhances performance in unseen domains.  
+  \item Accuracy vs. speed trade-offs remain key for real-time robotics.
+\end{itemize}
+\end{frame}
+
+% ===================== Conclusion & Future Work =====================
+\begin{frame}{Conclusion and Future Work}
+\small
+This project developed an integrated architecture for perception, reasoning, and planning. The system achieved improved generalization and interpretability in complex tasks.  
+\\[0.3em]
+\textbf{Future Work:}
+\begin{itemize}
+  \item Optimize planning speed for real-time deployment.
+  \item Extend to multi-agent coordination and dynamic environments.
+  \item Evaluate on physical robots and cluttered scenes.  
+\end{itemize}
+\end{frame}
+
+% ===================== References =====================
+\begin{frame}[allowframebreaks,plain,noframenumbering]{References}
+\tiny
+\bibliographystyle{IEEEtran}
+\bibliography{bibliography}
+\end{frame}
+
+\end{document}
